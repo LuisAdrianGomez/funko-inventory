@@ -3,23 +3,18 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # Allow manual trigger
   workflow_dispatch:
 
-# Grant GITHUB_TOKEN permissions to deploy Pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# Allow only one concurrent deployment
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build
+  build-and-deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,29 +32,13 @@ jobs:
       - name: Build
         env:
           NODE_ENV: production
-          # Inject env vars from GitHub Secrets at build time
           VITE_GITHUB_OWNER: ${{ secrets.VITE_GITHUB_OWNER }}
           VITE_GITHUB_REPO: ${{ secrets.VITE_GITHUB_REPO }}
           VITE_GITHUB_BRANCH: ${{ secrets.VITE_GITHUB_BRANCH || 'main' }}
-          # NOTE: VITE_GITHUB_TOKEN is intentionally NOT injected here.
-          # The token is loaded from the user's .env.local at runtime (client-side).
-          # For a public personal app this is acceptable.
-          # In Fase 3 the Cloudflare Worker proxy removes the need to expose any key.
         run: npm run build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-  deploy:
-    name: Deploy
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
