@@ -201,6 +201,160 @@ export function addUnit(inventory, barcode) {
 }
 
 /**
+ * Removes 1 unit from an existing product identified by barcode.
+ * Stock cannot go below 0.
+ * Returns a NEW inventory object (immutable update).
+ * Throws if the product is not found.
+ *
+ * @param {object} inventory
+ * @param {string} barcode
+ * @returns {object} updated inventory
+ */
+export function removeUnit(inventory, barcode) {
+  const productIndex = inventory.products.findIndex(
+    (p) => String(p.barcode) === String(barcode)
+  )
+  if (productIndex === -1) {
+    throw new Error(`Producto con código ${barcode} no encontrado.`)
+  }
+
+  const product = inventory.products[productIndex]
+  if ((product.stock || 0) <= 0) {
+    throw new Error(`El stock de "${product.name}" ya está en 0.`)
+  }
+
+  const now = new Date().toISOString()
+  const updated = { ...product }
+  updated.stock = updated.stock - 1
+  updated.updated_at = now
+  updated.history = [
+    ...(updated.history || []),
+    { action: 'remove', units: 1, date: now, note: '' },
+  ]
+
+  const products = [...inventory.products]
+  products[productIndex] = updated
+
+  return { ...inventory, products, last_updated: now }
+}
+
+/**
+ * Sets the stock of a product to an explicit value.
+ * Records the delta as a history entry.
+ * Returns a NEW inventory object (immutable update).
+ * Throws if the product is not found or value is invalid.
+ *
+ * @param {object} inventory
+ * @param {string} barcode
+ * @param {number} newValue  - Must be >= 0
+ * @returns {object} updated inventory
+ */
+export function setStock(inventory, barcode, newValue) {
+  const parsed = parseInt(newValue, 10)
+  if (isNaN(parsed) || parsed < 0) {
+    throw new Error('El stock debe ser un número entero igual o mayor a 0.')
+  }
+
+  const productIndex = inventory.products.findIndex(
+    (p) => String(p.barcode) === String(barcode)
+  )
+  if (productIndex === -1) {
+    throw new Error(`Producto con código ${barcode} no encontrado.`)
+  }
+
+  const product = inventory.products[productIndex]
+  const oldStock = product.stock || 0
+  const delta = parsed - oldStock
+
+  if (delta === 0) return inventory // No change needed
+
+  const now = new Date().toISOString()
+  const updated = { ...product }
+  updated.stock = parsed
+  updated.updated_at = now
+  updated.history = [
+    ...(updated.history || []),
+    {
+      action: delta > 0 ? 'add' : 'remove',
+      units: Math.abs(delta),
+      date: now,
+      note: `Ajuste manual: ${oldStock} → ${parsed}`,
+    },
+  ]
+
+  const products = [...inventory.products]
+  products[productIndex] = updated
+
+  return { ...inventory, products, last_updated: now }
+}
+
+/**
+ * Updates the metadata fields of an existing product.
+ * Does NOT modify stock or history — use addUnit/removeUnit/setStock for that.
+ * Returns a NEW inventory object (immutable update).
+ * Throws if the product is not found.
+ *
+ * @param {object} inventory
+ * @param {string} barcode      - Identifies the product to update
+ * @param {object} fields       - Partial product fields to merge in
+ * @returns {object} updated inventory
+ */
+export function updateProduct(inventory, barcode, fields) {
+  const productIndex = inventory.products.findIndex(
+    (p) => String(p.barcode) === String(barcode)
+  )
+  if (productIndex === -1) {
+    throw new Error(`Producto con código ${barcode} no encontrado.`)
+  }
+
+  const now = new Date().toISOString()
+  // Protect immutable fields
+  const { id, barcode: _bc, stock, history, created_at, ...safeFields } = fields
+
+  const updated = {
+    ...inventory.products[productIndex],
+    ...safeFields,
+    // Sync is_exclusive with exclusive field
+    is_exclusive: Boolean(safeFields.exclusive || inventory.products[productIndex].exclusive),
+    updated_at: now,
+  }
+
+  // If exclusive is explicitly set to empty string, clear is_exclusive too
+  if ('exclusive' in safeFields) {
+    updated.is_exclusive = Boolean(safeFields.exclusive)
+  }
+
+  const products = [...inventory.products]
+  products[productIndex] = updated
+
+  return { ...inventory, products, last_updated: now }
+}
+
+/**
+ * Removes a product from the inventory entirely.
+ * Returns a NEW inventory object (immutable update).
+ *
+ * @param {object} inventory
+ * @param {string} barcode
+ * @returns {object} updated inventory
+ */
+export function deleteProduct(inventory, barcode) {
+  const exists = findByBarcode(inventory, barcode)
+  if (!exists) {
+    throw new Error(`Producto con código ${barcode} no encontrado.`)
+  }
+
+  const now = new Date().toISOString()
+  return {
+    ...inventory,
+    products: inventory.products.filter(
+      (p) => String(p.barcode) !== String(barcode)
+    ),
+    last_updated: now,
+  }
+}
+
+/**
  * Adds a brand-new product to the inventory.
  * Returns a NEW inventory object (immutable update).
  * Throws if a product with the same barcode already exists.
