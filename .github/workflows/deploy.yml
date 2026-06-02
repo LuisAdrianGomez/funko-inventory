@@ -29,23 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Debug secrets
-        run: |
-          echo "TOKEN length: ${#VITE_GITHUB_TOKEN}"
-          echo "OWNER: $VITE_GITHUB_OWNER"
-          echo "REPO: $VITE_GITHUB_REPO"
-        env:
-          VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
-          VITE_GITHUB_OWNER: ${{ secrets.VITE_GITHUB_OWNER }}
-          VITE_GITHUB_REPO: ${{ secrets.VITE_GITHUB_REPO }}
-
       - name: Build
         run: npm run build
         env:
-          VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
-          VITE_GITHUB_OWNER: ${{ secrets.VITE_GITHUB_OWNER }}
-          VITE_GITHUB_REPO: ${{ secrets.VITE_GITHUB_REPO }}
-          VITE_GITHUB_BRANCH: main
+          VITE_APPS_SCRIPT_URL: ${{ secrets.VITE_APPS_SCRIPT_URL }}
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4

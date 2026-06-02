@@ -10,7 +10,7 @@ import {
   addProduct as addProductHelper,
   updateProduct as updateProductHelper,
   deleteProduct as deleteProductHelper,
-} from '../services/github'
+} from '../services/drive'
 
 const InventoryContext = createContext(null)
 
@@ -19,17 +19,14 @@ export function InventoryProvider({ children }) {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
 
-  // SHA ref — always reflects the latest SHA from GitHub
-  // Using a ref (not state) so it never causes re-renders
+  // No SHA needed with Drive — kept as null for API compatibility
   const shaRef = useRef(null)
 
-  // ── Load ────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const { data, sha } = await readInventory()
-      shaRef.current = sha
+      const { data } = await readInventory()
       setInventory(data)
     } catch (e) {
       setError(e.message)
@@ -40,17 +37,10 @@ export function InventoryProvider({ children }) {
 
   useEffect(() => { load() }, [load])
 
-  // ── Persist ─────────────────────────────────────────────────────
-  /**
-   * Writes updatedInventory to GitHub using the current SHA.
-   * Updates local state and SHA ref on success.
-   * Returns true on success, false on failure.
-   */
   const persist = useCallback(async (updatedInventory) => {
     setError(null)
     try {
-      const newSha = await writeInventory(updatedInventory, shaRef.current)
-      shaRef.current = newSha
+      await writeInventory(updatedInventory, shaRef.current)
       setInventory(updatedInventory)
       return true
     } catch (e) {
@@ -59,39 +49,30 @@ export function InventoryProvider({ children }) {
     }
   }, [])
 
-  // ── Public API ──────────────────────────────────────────────────
-  const refresh = useCallback(async () => {
-    await load()
-  }, [load])
+  const refresh = useCallback(async () => { await load() }, [load])
 
   const addUnit = useCallback(async (barcode) => {
-    const updated = addUnitHelper(inventory, barcode)
-    return persist(updated)
+    return persist(addUnitHelper(inventory, barcode))
   }, [inventory, persist])
 
   const removeUnit = useCallback(async (barcode) => {
-    const updated = removeUnitHelper(inventory, barcode)
-    return persist(updated)
+    return persist(removeUnitHelper(inventory, barcode))
   }, [inventory, persist])
 
   const updateStock = useCallback(async (barcode, newValue) => {
-    const updated = setStockHelper(inventory, barcode, newValue)
-    return persist(updated)
+    return persist(setStockHelper(inventory, barcode, newValue))
   }, [inventory, persist])
 
   const addNewProduct = useCallback(async (product) => {
-    const updated = addProductHelper(inventory, product)
-    return persist(updated)
+    return persist(addProductHelper(inventory, product))
   }, [inventory, persist])
 
   const editProduct = useCallback(async (barcode, fields) => {
-    const updated = updateProductHelper(inventory, barcode, fields)
-    return persist(updated)
+    return persist(updateProductHelper(inventory, barcode, fields))
   }, [inventory, persist])
 
   const removeProduct = useCallback(async (barcode) => {
-    const updated = deleteProductHelper(inventory, barcode)
-    return persist(updated)
+    return persist(deleteProductHelper(inventory, barcode))
   }, [inventory, persist])
 
   const handleBarcode = useCallback(async (barcode, productMeta = null) => {
@@ -118,33 +99,19 @@ export function InventoryProvider({ children }) {
     outOfStock:    inventory.products.filter((p) => (p.stock || 0) === 0).length,
   }
 
-  const value = {
-    inventory,
-    loading,
-    error,
-    stats,
-    refresh,
-    handleBarcode,
-    addUnit,
-    removeUnit,
-    updateStock,
-    addNewProduct,
-    editProduct,
-    removeProduct,
-    findByBarcode: (barcode) => findByBarcodeHelper(inventory, barcode),
-  }
-
   return (
-    <InventoryContext.Provider value={value}>
+    <InventoryContext.Provider value={{
+      inventory, loading, error, stats,
+      refresh, handleBarcode,
+      addUnit, removeUnit, updateStock,
+      addNewProduct, editProduct, removeProduct,
+      findByBarcode: (barcode) => findByBarcodeHelper(inventory, barcode),
+    }}>
       {children}
     </InventoryContext.Provider>
   )
 }
 
-/**
- * useInventory — consumes the shared InventoryContext.
- * Must be used inside <InventoryProvider>.
- */
 export function useInventory() {
   const ctx = useContext(InventoryContext)
   if (!ctx) throw new Error('useInventory must be used inside <InventoryProvider>')
