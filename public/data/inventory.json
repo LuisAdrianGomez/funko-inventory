@@ -1,5 +1,31 @@
 {
   "version": "1.0",
-  "last_updated": "2026-06-01T23:46:42.694Z",
-  "products": []
+  "last_updated": "2026-06-02T00:38:58.760Z",
+  "products": [
+    {
+      "id": "3443",
+      "barcode": "3443",
+      "name": "fref",
+      "number": "34",
+      "line": "fee",
+      "series": "ere",
+      "exclusive": null,
+      "is_exclusive": false,
+      "image_front": null,
+      "image_base": null,
+      "stock": 1,
+      "price": null,
+      "notes": "re",
+      "created_at": "2026-06-02T00:38:58.760Z",
+      "updated_at": "2026-06-02T00:38:58.760Z",
+      "history": [
+        {
+          "action": "add",
+          "units": 1,
+          "date": "2026-06-02T00:38:58.760Z",
+          "note": "Producto creado"
+        }
+      ]
+    }
+  ]
 }
