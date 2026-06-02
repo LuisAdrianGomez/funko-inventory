@@ -30,12 +30,12 @@ jobs:
         run: npm ci
 
       - name: Build
+        run: npm run build
         env:
-          NODE_ENV: production
+          VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
           VITE_GITHUB_OWNER: ${{ secrets.VITE_GITHUB_OWNER }}
           VITE_GITHUB_REPO: ${{ secrets.VITE_GITHUB_REPO }}
           VITE_GITHUB_BRANCH: ${{ secrets.VITE_GITHUB_BRANCH || 'main' }}
-        run: npm run build
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
