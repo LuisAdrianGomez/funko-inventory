@@ -63,7 +63,8 @@ export default function CameraCapture({
     setTimeout(() => inputRef.current?.click(), 100)
   }
 
-  function handleConfirm() {
+ function handleConfirm() {
+    console.log('handleConfirm called, preview:', !!preview)
     if (preview) onCapture(preview)
   }
 
