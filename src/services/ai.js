@@ -36,7 +36,8 @@ export async function extractFunkoMetadata(imageBase64) {
   try {
     response = await fetch(PROXY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // text/plain evita el preflight CORS que Apps Script no maneja
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ image_base64: base64Clean, media_type: mediaType }),
       signal: controller.signal,
     })
