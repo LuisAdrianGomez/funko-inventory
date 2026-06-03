@@ -1,332 +1,547 @@
+// ============================================================
+// Funko Inventory — AddProduct
+// ============================================================
+// Flujo completo de agregar un Funko por foto con IA.
+//
+// Estados:
+//   idle              → pantalla de elección (foto IA vs manual)
+//   step_front_photo  → CameraCapture para foto frontal
+//   step_analyzing    → spinner mientras Claude extrae metadatos
+//   step_base_photo   → CameraCapture para foto de la base
+//   step_reading_barcode → spinner mientras ZXing lee el código
+//   step_confirm      → formulario pre-llenado, editable
+//   step_duplicate    → el barcode ya existe, ofrecer +1 unidad
+//   step_saving       → spinner mientras se guarda en Drive
+//
+// El flujo manual (sin IA) se mantiene en <ManualForm />
+// y no cambia respecto a Fase 2.
+// ============================================================
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useInventory } from '../hooks/useInventory'
+import { useInventory } from '../context/InventoryContext'
 import { useToast } from '../hooks/useToast'
-import ToastContainer from '../components/UI/Toast'
-import Spinner from '../components/UI/Spinner'
+import { extractFunkoMetadata } from '../services/ai'
+import { readBarcodeFromImage } from '../utils/barcode'
 import { compressToThumbnail } from '../utils/image'
+import CameraCapture from '../components/Camera/CameraCapture'
+import Spinner from '../components/UI/Spinner'
 
-function TextInput({ value, onChange, placeholder, disabled, type = 'text', required }) {
-  return (
-    <input
-      type={type}
-      value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      disabled={disabled}
-      required={required}
-      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
-                 text-sm text-slate-200 placeholder-slate-600
-                 focus:outline-none focus:border-slate-500
-                 disabled:opacity-40"
-    />
-  )
+// ── Constantes de estado ─────────────────────────────────────
+const STEP = {
+  IDLE:              'idle',
+  FRONT_PHOTO:       'step_front_photo',
+  ANALYZING:         'step_analyzing',
+  BASE_PHOTO:        'step_base_photo',
+  READING_BARCODE:   'step_reading_barcode',
+  CONFIRM:           'step_confirm',
+  DUPLICATE:         'step_duplicate',
+  SAVING:            'step_saving',
+  MANUAL:            'manual',
 }
 
-function ImagePickerButton({ label, value, onChange, disabled }) {
-  const [compressing, setCompressing] = useState(false)
-
-  const handleFile = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCompressing(true)
-    try {
-      const b64 = await compressToThumbnail(file)
-      onChange(b64)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setCompressing(false)
-    }
-  }
-
+// ── Formulario de confirmación / edición ────────────────────
+function ConfirmForm({ metadata, frontPhoto, basePhoto, barcode, onBarcodeChange, onMetaChange, onSave, onCancel, barcodeError }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-        {compressing ? <Spinner size="sm" /> : value ? (
-          <img src={value} alt={label} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-xl">📷</span>
+    <div className="flex flex-col gap-4 px-4 py-6">
+      <h2 className="text-lg font-semibold text-white">Confirmar datos</h2>
+
+      {/* Thumbnails */}
+      <div className="flex gap-3">
+        {frontPhoto && (
+          <div className="flex-1">
+            <p className="text-xs text-zinc-500 mb-1">Foto frontal</p>
+            <img src={frontPhoto} alt="Frontal" className="w-full h-28 object-contain rounded-lg bg-zinc-800" />
+          </div>
+        )}
+        {basePhoto && (
+          <div className="flex-1">
+            <p className="text-xs text-zinc-500 mb-1">Base</p>
+            <img src={basePhoto} alt="Base" className="w-full h-28 object-contain rounded-lg bg-zinc-800" />
+          </div>
         )}
       </div>
-      <label className={`text-xs px-3 py-1.5 rounded-lg border border-slate-600
-        text-slate-300 cursor-pointer hover:border-slate-400 transition-colors
-        ${disabled || compressing ? 'opacity-40 pointer-events-none' : ''}`}>
-        {value ? `${label} ✓` : label}
-        <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={disabled || compressing} />
+
+      {/* Barcode */}
+      <div>
+        <label className="block text-xs text-zinc-400 mb-1">Código de barras *</label>
+        <input
+          type="text"
+          value={barcode}
+          onChange={e => onBarcodeChange(e.target.value)}
+          placeholder="Ingresa el código manualmente"
+          className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700
+                     text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+        />
+        {barcodeError && (
+          <p className="mt-1 text-xs text-amber-400">{barcodeError}</p>
+        )}
+      </div>
+
+      {/* Campos de metadatos */}
+      {[
+        { key: 'name',    label: 'Nombre *',   placeholder: 'Ej. Spider-Man' },
+        { key: 'number',  label: 'Número',     placeholder: 'Ej. 1234' },
+        { key: 'line',    label: 'Línea',      placeholder: 'Ej. Marvel' },
+        { key: 'series',  label: 'Serie',      placeholder: 'Ej. Marvel Studios' },
+        { key: 'exclusive', label: 'Exclusiva', placeholder: 'Ej. Hot Topic (o vacío)' },
+      ].map(({ key, label, placeholder }) => (
+        <div key={key}>
+          <label className="block text-xs text-zinc-400 mb-1">{label}</label>
+          <input
+            type="text"
+            value={metadata[key] || ''}
+            onChange={e => onMetaChange(key, e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700
+                       text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+      ))}
+
+      {/* Toggle exclusivo */}
+      <label className="flex items-center gap-3 cursor-pointer">
+        <div
+          onClick={() => onMetaChange('is_exclusive', !metadata.is_exclusive)}
+          className={`w-11 h-6 rounded-full transition-colors ${metadata.is_exclusive ? 'bg-indigo-600' : 'bg-zinc-700'}`}
+        >
+          <div className={`w-5 h-5 rounded-full bg-white shadow mt-0.5 transition-transform
+                          ${metadata.is_exclusive ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </div>
+        <span className="text-sm text-zinc-300">Es exclusivo</span>
       </label>
+
+      {/* Botones */}
+      <div className="flex flex-col gap-3 mt-2">
+        <button
+          onClick={onSave}
+          disabled={!barcode || !metadata.name}
+          className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+                     text-white font-semibold text-sm transition-colors disabled:opacity-40"
+        >
+          Confirmar y guardar
+        </button>
+        <button
+          onClick={onCancel}
+          className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700
+                     text-zinc-300 font-semibold text-sm transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   )
 }
 
-const EMPTY_FORM = {
-  barcode: '', name: '', number: '', line: '', series: '',
-  exclusive: '', is_exclusive: false, price: '', notes: '',
-  image_front: null, image_base: null,
+// ── Formulario manual (Fase 2, sin cambios) ─────────────────
+function ManualForm({ onSave, onCancel }) {
+  const [form, setForm] = useState({
+    barcode: '', name: '', number: '', line: '',
+    series: '', exclusive: '', is_exclusive: false,
+    price: '', notes: '',
+  })
+
+  function set(key, val) {
+    setForm(prev => ({ ...prev, [key]: val }))
+  }
+
+  return (
+    <div className="flex flex-col gap-4 px-4 py-6">
+      <h2 className="text-lg font-semibold text-white">Agregar manualmente</h2>
+
+      {[
+        { key: 'barcode',   label: 'Código de barras *', placeholder: '012345678901' },
+        { key: 'name',      label: 'Nombre *',           placeholder: 'Ej. Spider-Man' },
+        { key: 'number',    label: 'Número',             placeholder: 'Ej. 1234' },
+        { key: 'line',      label: 'Línea',              placeholder: 'Ej. Marvel' },
+        { key: 'series',    label: 'Serie',              placeholder: 'Ej. Marvel Studios' },
+        { key: 'exclusive', label: 'Exclusiva',          placeholder: 'Ej. Hot Topic' },
+        { key: 'price',     label: 'Precio',             placeholder: '9.99' },
+        { key: 'notes',     label: 'Notas',              placeholder: '' },
+      ].map(({ key, label, placeholder }) => (
+        <div key={key}>
+          <label className="block text-xs text-zinc-400 mb-1">{label}</label>
+          <input
+            type={key === 'price' ? 'number' : 'text'}
+            value={form[key]}
+            onChange={e => set(key, e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700
+                       text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+      ))}
+
+      <label className="flex items-center gap-3 cursor-pointer">
+        <div
+          onClick={() => set('is_exclusive', !form.is_exclusive)}
+          className={`w-11 h-6 rounded-full transition-colors ${form.is_exclusive ? 'bg-indigo-600' : 'bg-zinc-700'}`}
+        >
+          <div className={`w-5 h-5 rounded-full bg-white shadow mt-0.5 transition-transform
+                          ${form.is_exclusive ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </div>
+        <span className="text-sm text-zinc-300">Es exclusivo</span>
+      </label>
+
+      <div className="flex flex-col gap-3 mt-2">
+        <button
+          onClick={() => onSave(form)}
+          disabled={!form.barcode || !form.name}
+          className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500
+                     text-white font-semibold text-sm transition-colors disabled:opacity-40"
+        >
+          Guardar
+        </button>
+        <button
+          onClick={onCancel}
+          className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700
+                     text-zinc-300 font-semibold text-sm transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
 }
 
+// ── Pantalla de spinner con mensaje ─────────────────────────
+function LoadingScreen({ message }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 px-6 py-20">
+      <Spinner />
+      <p className="text-sm text-zinc-400 text-center">{message}</p>
+    </div>
+  )
+}
+
+// ── Componente principal ─────────────────────────────────────
 export default function AddProduct() {
-  const navigate = useNavigate()
-  const { addNewProduct, findByBarcode, loading } = useInventory()
-  const { toasts, toast, dismiss } = useToast()
+  const navigate                    = useNavigate()
+  const { addNewProduct, addUnit, findByBarcode } = useInventory()
+  const { showToast }               = useToast()
 
-  const [mode, setMode] = useState('choice') // 'choice' | 'manual'
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
-  const [errors, setErrors] = useState({})
+  const [step, setStep]             = useState(STEP.IDLE)
+  const [frontPhoto, setFrontPhoto] = useState(null)   // Data URL 800px — para IA
+  const [frontThumb, setFrontThumb] = useState(null)   // Data URL 200px — para guardar
+  const [basePhoto, setBasePhoto]   = useState(null)   // Data URL 800px — para ZXing
+  const [baseThumb, setBaseThumb]   = useState(null)   // Data URL 200px — para guardar
+  const [metadata, setMetadata]     = useState({
+    name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false,
+  })
+  const [barcode, setBarcode]       = useState('')
+  const [barcodeError, setBarcodeError] = useState('')
+  const [duplicateProduct, setDuplicateProduct] = useState(null)
 
-  const set = (key) => (value) => {
-    setForm((prev) => {
-      const next = { ...prev, [key]: value }
-      if (key === 'exclusive') next.is_exclusive = Boolean(value)
-      if (key === 'is_exclusive' && !value) next.exclusive = ''
-      return next
-    })
-    if (errors[key]) setErrors((e) => ({ ...e, [key]: null }))
+  // ── Helpers ────────────────────────────────────────────────
+
+  function resetFlow() {
+    setStep(STEP.IDLE)
+    setFrontPhoto(null)
+    setFrontThumb(null)
+    setBasePhoto(null)
+    setBaseThumb(null)
+    setMetadata({ name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false })
+    setBarcode('')
+    setBarcodeError('')
+    setDuplicateProduct(null)
   }
 
-  const validate = () => {
-    const e = {}
-    if (!form.barcode.trim()) e.barcode = 'Requerido'
-    if (!form.name.trim()) e.name = 'Requerido'
-    if (findByBarcode(form.barcode)) e.barcode = 'Este código ya existe en el inventario'
-    return e
+  function setMeta(key, val) {
+    setMetadata(prev => ({ ...prev, [key]: val }))
   }
 
-  const handleSave = async () => {
-    const e = validate()
-    if (Object.keys(e).length) { setErrors(e); return }
+  // ── Paso 1: foto frontal capturada ────────────────────────
+  async function handleFrontPhoto(base64) {
+    setFrontPhoto(base64)
 
-    setSaving(true)
+    // Generar thumbnail 200px para guardar en Drive
     try {
-      await addNewProduct({
-        ...form,
-        price: form.price ? parseFloat(form.price) : null,
-        exclusive: form.exclusive || null,
-        is_exclusive: Boolean(form.exclusive),
+      // base64 ya es Data URL — convertir a File para comprimir a 200px
+      const res   = await fetch(base64)
+      const blob  = await res.blob()
+      const file  = new File([blob], 'front.jpg', { type: blob.type })
+      const thumb = await compressToThumbnail(file, 200)
+      setFrontThumb(thumb)
+    } catch {
+      setFrontThumb(base64) // fallback: usar la misma foto
+    }
+
+    setStep(STEP.ANALYZING)
+
+    try {
+      const meta = await extractFunkoMetadata(base64)
+      setMetadata({
+        name:         meta.name         || '',
+        number:       meta.number       || '',
+        line:         meta.line         || '',
+        series:       meta.series       || '',
+        exclusive:    meta.exclusive    || '',
+        is_exclusive: meta.is_exclusive === true,
       })
-      toast.success(`"${form.name}" agregado al inventario`)
-      setTimeout(() => navigate(`/product/${form.barcode}`), 800)
+      setStep(STEP.BASE_PHOTO)
     } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSaving(false)
+      showToast(err.message || 'Error al analizar la foto con IA.', 'error')
+      setStep(STEP.FRONT_PHOTO) // regresa para reintentar
     }
   }
 
-  // ── Choice screen ──────────────────────────────────────────────
-  if (mode === 'choice') {
+  // ── Paso 2: foto de la base capturada ────────────────────
+  async function handleBasePhoto(base64) {
+    setBasePhoto(base64)
+
+    // Generar thumbnail 200px para guardar en Drive
+    try {
+      const res   = await fetch(base64)
+      const blob  = await res.blob()
+      const file  = new File([blob], 'base.jpg', { type: blob.type })
+      const thumb = await compressToThumbnail(file, 200)
+      setBaseThumb(thumb)
+    } catch {
+      setBaseThumb(base64)
+    }
+
+    setStep(STEP.READING_BARCODE)
+
+    const result = await readBarcodeFromImage(base64)
+
+    if (result.success) {
+      setBarcode(result.value)
+      setBarcodeError('')
+    } else {
+      // ZXing falló — mostrar campo manual con advertencia
+      setBarcode('')
+      setBarcodeError('No se detectó el código automáticamente. Ingrésalo manualmente.')
+      showToast('No se pudo leer el código de barras. Puedes ingresarlo a mano.', 'info')
+    }
+
+    setStep(STEP.CONFIRM)
+  }
+
+  // ── Paso 3: guardar ───────────────────────────────────────
+  async function handleSave() {
+    if (!barcode) {
+      setBarcodeError('El código de barras es obligatorio.')
+      return
+    }
+    if (!metadata.name) {
+      showToast('El nombre del Funko es obligatorio.', 'error')
+      return
+    }
+
+    // Verificar duplicado justo antes de guardar
+    const existing = findByBarcode(barcode)
+    if (existing) {
+      setDuplicateProduct(existing)
+      setStep(STEP.DUPLICATE)
+      return
+    }
+
+    setStep(STEP.SAVING)
+
+    const product = {
+      barcode,
+      ...metadata,
+      exclusive:    metadata.is_exclusive ? (metadata.exclusive || null) : null,
+      image_front:  frontThumb || null,
+      image_base:   baseThumb  || null,
+      price:        null,
+      notes:        '',
+    }
+
+    const ok = await addNewProduct(product)
+
+    if (ok) {
+      showToast(`"${metadata.name}" agregado al inventario.`, 'success')
+      navigate(`/product/${barcode}`)
+    } else {
+      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      setStep(STEP.CONFIRM)
+    }
+  }
+
+  // ── Paso duplicado: agregar unidad ────────────────────────
+  async function handleAddUnit() {
+    setStep(STEP.SAVING)
+    const ok = await addUnit(barcode)
+    if (ok) {
+      showToast(`+1 unidad a "${duplicateProduct.name}".`, 'success')
+      navigate(`/product/${barcode}`)
+    } else {
+      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      setStep(STEP.DUPLICATE)
+    }
+  }
+
+  // ── Guardar producto manual ───────────────────────────────
+  async function handleManualSave(form) {
+    const existing = findByBarcode(form.barcode)
+    if (existing) {
+      showToast(`El código "${form.barcode}" ya existe en el inventario.`, 'error')
+      return
+    }
+
+    setStep(STEP.SAVING)
+
+    const product = {
+      ...form,
+      price: form.price ? parseFloat(form.price) : null,
+      exclusive: form.is_exclusive ? (form.exclusive || null) : null,
+      image_front: null,
+      image_base:  null,
+    }
+
+    const ok = await addNewProduct(product)
+
+    if (ok) {
+      showToast(`"${form.name}" agregado al inventario.`, 'success')
+      navigate(`/product/${form.barcode}`)
+    } else {
+      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      setStep(STEP.MANUAL)
+    }
+  }
+
+  // ── Renders por estado ────────────────────────────────────
+
+  if (step === STEP.ANALYZING) {
+    return <LoadingScreen message="Analizando la foto con IA…" />
+  }
+
+  if (step === STEP.READING_BARCODE) {
+    return <LoadingScreen message="Leyendo código de barras…" />
+  }
+
+  if (step === STEP.SAVING) {
+    return <LoadingScreen message="Guardando en tu inventario…" />
+  }
+
+  if (step === STEP.FRONT_PHOTO) {
     return (
-      <>
-        <div className="max-w-md mx-auto py-4 space-y-4">
-          <h2 className="text-xl font-bold text-slate-100">Agregar Funko</h2>
-
-          {/* Manual option */}
-          <button
-            onClick={() => setMode('manual')}
-            className="w-full card p-5 flex items-center gap-4 text-left
-                       hover:border-slate-500 active:scale-[0.98] transition-all"
-          >
-            <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center text-2xl flex-shrink-0">
-              ✏️
-            </div>
-            <div>
-              <p className="font-semibold text-slate-200">Agregar manualmente</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Llena los datos del Funko a mano
-              </p>
-            </div>
-            <span className="text-slate-600 ml-auto text-lg">›</span>
-          </button>
-
-          {/* Phase 3 placeholder */}
-          <div className="card p-5 flex items-center gap-4 opacity-50 cursor-not-allowed border-dashed">
-            <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-2xl flex-shrink-0">
-              📸
-            </div>
-            <div>
-              <p className="font-semibold text-slate-400">Con fotos — IA</p>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Próximamente en Fase 3 · Claude Vision
-              </p>
-            </div>
-            <span className="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded-full ml-auto flex-shrink-0">
-              Pronto
-            </span>
-          </div>
-
-          {/* Steps reference */}
-          <div className="card p-4 space-y-2 border-dashed border-slate-700">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              Flujo Fase 3 (próximamente)
-            </p>
-            {[
-              ['1', 'Foto frontal', 'IA extrae nombre, número y línea', false],
-              ['2', 'Foto de la base', 'Lee el código de barras', false],
-              ['3', 'Confirmar y guardar', 'Crea o actualiza el producto', false],
-            ].map(([n, label, detail, ready]) => (
-              <div key={n} className="flex items-start gap-3 py-1.5 border-b border-slate-800 last:border-0">
-                <div className="w-5 h-5 rounded-full bg-slate-800 text-slate-600 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
-                  {n}
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500">{label}</p>
-                  <p className="text-xs text-slate-600">{detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <ToastContainer toasts={toasts} onDismiss={dismiss} />
-      </>
+      <CameraCapture
+        label="Foto frontal del Funko"
+        hint="Asegúrate que el nombre y número sean legibles"
+        maxPx={800}
+        onCapture={handleFrontPhoto}
+        onCancel={resetFlow}
+      />
     )
   }
 
-  // ── Manual form ────────────────────────────────────────────────
-  return (
-    <>
-      <div className="max-w-md mx-auto py-4 space-y-4 pb-8">
-        <button
-          onClick={() => setMode('choice')}
-          className="flex items-center gap-1 text-slate-400 text-sm hover:text-slate-200 transition-colors"
-        >
-          ‹ Atrás
-        </button>
+  if (step === STEP.BASE_PHOTO) {
+    return (
+      <CameraCapture
+        label="Foto de la base del Funko"
+        hint="Enfoca el código de barras claramente"
+        maxPx={800}
+        onCapture={handleBasePhoto}
+        onCancel={resetFlow}
+      />
+    )
+  }
 
-        <h2 className="text-xl font-bold text-slate-100">Nuevo Funko</h2>
+  if (step === STEP.CONFIRM) {
+    return (
+      <ConfirmForm
+        metadata={metadata}
+        frontPhoto={frontThumb}
+        basePhoto={baseThumb}
+        barcode={barcode}
+        barcodeError={barcodeError}
+        onBarcodeChange={setBarcode}
+        onMetaChange={setMeta}
+        onSave={handleSave}
+        onCancel={resetFlow}
+      />
+    )
+  }
 
-        {/* Required fields */}
-        <div className="card p-4 space-y-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Obligatorios</p>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-              Código de barras *
-            </label>
-            <TextInput
-              value={form.barcode}
-              onChange={set('barcode')}
-              placeholder="Ej. 012345678901"
-              disabled={saving}
-              type="text"
-            />
-            {errors.barcode && <p className="text-xs text-red-400">{errors.barcode}</p>}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-              Nombre *
-            </label>
-            <TextInput
-              value={form.name}
-              onChange={set('name')}
-              placeholder="Ej. Spider-Man"
-              disabled={saving}
-            />
-            {errors.name && <p className="text-xs text-red-400">{errors.name}</p>}
-          </div>
+  if (step === STEP.DUPLICATE) {
+    return (
+      <div className="flex flex-col items-center gap-6 px-6 py-12">
+        <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+          <svg className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
         </div>
 
-        {/* Optional fields */}
-        <div className="card p-4 space-y-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Opcionales</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Número</label>
-              <TextInput value={form.number} onChange={set('number')} placeholder="#03" disabled={saving} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Precio</label>
-              <TextInput type="number" value={form.price} onChange={set('price')} placeholder="0.00" disabled={saving} />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Línea</label>
-            <TextInput value={form.line} onChange={set('line')} placeholder="Ej. Marvel" disabled={saving} />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Serie</label>
-            <TextInput value={form.series} onChange={set('series')} placeholder="Ej. Marvel Studios" disabled={saving} />
-          </div>
-
-          {/* Exclusive */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Exclusivo de</label>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => set('is_exclusive')(!form.is_exclusive)}
-                className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                  form.is_exclusive ? 'bg-funko-orange' : 'bg-slate-700'
-                }`}
-              >
-                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                  form.is_exclusive ? 'translate-x-5' : 'translate-x-1'
-                }`} />
-              </button>
-              <span className="text-xs text-slate-400">
-                {form.is_exclusive ? 'Es exclusivo' : 'No es exclusivo'}
-              </span>
-            </div>
-            {form.is_exclusive && (
-              <TextInput
-                value={form.exclusive}
-                onChange={set('exclusive')}
-                placeholder="Ej. Hot Topic, GameStop..."
-                disabled={saving}
-              />
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notas</label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => set('notes')(e.target.value)}
-              placeholder="Notas adicionales..."
-              rows={2}
-              disabled={saving}
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
-                         text-sm text-slate-200 placeholder-slate-600 resize-none
-                         focus:outline-none focus:border-slate-500 disabled:opacity-40"
-            />
-          </div>
+        <div className="text-center">
+          <p className="text-base font-semibold text-white">Este Funko ya está en tu inventario</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            "{duplicateProduct?.name}" · {duplicateProduct?.stock} unidad{duplicateProduct?.stock !== 1 ? 'es' : ''}
+          </p>
+          <p className="mt-3 text-sm text-zinc-300">¿Agregar +1 unidad?</p>
         </div>
 
-        {/* Images */}
-        <div className="card p-4 space-y-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Fotos (opcional)</p>
-          <ImagePickerButton label="Foto frontal" value={form.image_front} onChange={set('image_front')} disabled={saving} />
-          <ImagePickerButton label="Foto de la base" value={form.image_base} onChange={set('image_base')} disabled={saving} />
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex flex-col w-full gap-3">
           <button
-            onClick={() => setMode('choice')}
-            disabled={saving}
-            className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300
-                       text-sm font-medium hover:border-slate-500 transition-colors disabled:opacity-40"
+            onClick={handleAddUnit}
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500
+                       text-white font-semibold text-sm transition-colors"
+          >
+            Sí, agregar unidad
+          </button>
+          <button
+            onClick={resetFlow}
+            className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700
+                       text-zinc-300 font-semibold text-sm transition-colors"
           >
             Cancelar
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || loading}
-            className="flex-1 py-3 rounded-xl bg-funko-orange hover:bg-funko-orange/90
-                       text-white text-sm font-semibold transition-colors
-                       disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {saving && <Spinner size="sm" />}
-            {saving ? 'Guardando...' : 'Agregar Funko'}
-          </button>
         </div>
       </div>
+    )
+  }
 
-      <ToastContainer toasts={toasts} onDismiss={dismiss} />
-    </>
+  if (step === STEP.MANUAL) {
+    return <ManualForm onSave={handleManualSave} onCancel={resetFlow} />
+  }
+
+  // ── IDLE — pantalla de elección ───────────────────────────
+  return (
+    <div className="flex flex-col gap-4 px-4 py-8">
+      <h1 className="text-xl font-bold text-white">Agregar Funko</h1>
+      <p className="text-sm text-zinc-400">¿Cómo quieres agregar la figura?</p>
+
+      {/* Opción IA */}
+      <button
+        onClick={() => setStep(STEP.FRONT_PHOTO)}
+        className="flex items-start gap-4 p-4 rounded-2xl bg-indigo-600/10 border border-indigo-500/30
+                   hover:bg-indigo-600/20 active:bg-indigo-600/30 transition-colors text-left"
+      >
+        <div className="w-10 h-10 rounded-full bg-indigo-600/30 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">Con fotos — IA</p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Toma una foto frontal y de la base. La IA extrae los datos automáticamente.
+          </p>
+        </div>
+      </button>
+
+      {/* Opción manual */}
+      <button
+        onClick={() => setStep(STEP.MANUAL)}
+        className="flex items-start gap-4 p-4 rounded-2xl bg-zinc-800 border border-zinc-700
+                   hover:bg-zinc-700 active:bg-zinc-600 transition-colors text-left"
+      >
+        <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">Manual</p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Llena los campos a mano. Sin fotos ni IA.
+          </p>
+        </div>
+      </button>
+    </div>
   )
 }
