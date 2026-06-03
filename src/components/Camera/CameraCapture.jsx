@@ -64,7 +64,6 @@ export default function CameraCapture({
   }
 
  function handleConfirm() {
-    console.log('handleConfirm called, preview:', !!preview)
     if (preview) onCapture(preview)
   }
 
