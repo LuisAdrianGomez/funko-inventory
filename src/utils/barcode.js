@@ -12,7 +12,6 @@ import { BrowserMultiFormatReader } from '@zxing/browser'
 
 /**
  * Rota un Data URL de imagen el ángulo indicado (90, 180, 270).
- * Devuelve un nuevo Data URL con la imagen rotada.
  */
 async function rotateImage(dataUrl, degrees) {
   return new Promise((resolve, reject) => {
@@ -35,17 +34,11 @@ async function rotateImage(dataUrl, degrees) {
   })
 }
 
-/**
- * Intenta decodificar un barcode desde un elemento <img> ya cargado.
- */
 async function tryDecode(img) {
   const reader = new BrowserMultiFormatReader()
   return reader.decodeFromImageElement(img)
 }
 
-/**
- * Carga un Data URL en un elemento <img> en memoria.
- */
 function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -66,7 +59,6 @@ export async function readBarcodeFromImage(imageSource) {
   let objectUrl = null
 
   try {
-    // --- Obtener Data URL ---
     let dataUrl
     if (imageSource instanceof File) {
       objectUrl = URL.createObjectURL(imageSource)
@@ -77,19 +69,15 @@ export async function readBarcodeFromImage(imageSource) {
       return { success: false, error: 'Tipo de imagen no soportado.' }
     }
 
-    // --- Intentar en múltiples rotaciones ---
     const rotations = [0, 180, 90, 270]
 
     for (const deg of rotations) {
       try {
-        console.log(`intentando rotación ${deg}°`)
         const rotated = deg === 0 ? dataUrl : await rotateImage(dataUrl, deg)
         const img     = await loadImage(rotated)
         const result  = await tryDecode(img)
-        console.log(`éxito en ${deg}°:`, result.getText())
         return { success: true, value: result.getText() }
       } catch (err) {
-        console.log(`fallo en ${deg}°:`, err?.name, err?.message)
         const isNotFound =
           err?.name === 'NotFoundException' ||
           err?.message?.includes('NotFoundException') ||
@@ -101,7 +89,6 @@ export async function readBarcodeFromImage(imageSource) {
       }
     }
 
-    // Ninguna rotación funcionó
     return {
       success: false,
       error: 'No se encontró un código de barras en la imagen. Intenta enfocar mejor la base del Funko.',
