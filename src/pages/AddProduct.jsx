@@ -264,7 +264,7 @@ export default function AddProduct() {
     }
   }
 
-  // ── Paso 1: foto frontal capturada ────────────────────────
+  // ── Paso 1: foto frontal capturada - luigomez ────────────────────────
   async function handleFrontPhoto(base64) {
     console.log('handleFrontPhoto called')
     setFrontPhoto(base64)
