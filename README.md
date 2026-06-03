@@ -1,15 +1,15 @@
 # Funko Inventory 📦
 
 App web personal para gestionar inventario de Funko Pops a la venta.  
-Desplegada en GitHub Pages, sin backend — el JSON vive en el repositorio.
+Desplegada en GitHub Pages — el inventario vive en **Google Drive** vía Apps Script.
 
 ## Stack
 
 - **React + Vite** — UI
 - **Tailwind CSS** — Estilos (dark mode)
-- **GitHub Contents API** — Persistencia del inventario (`public/data/inventory.json`)
-- **Claude API** (Fase 3) — Extracción de metadatos desde fotos
-- **Cloudflare Worker** (Fase 3) — Proxy para la API key de Claude
+- **Google Drive + Apps Script** — Persistencia del inventario (`funko-inventory.json` en Drive)
+- **Claude API** (Fase 3) — Extracción de metadatos desde fotos con visión
+- **Google Apps Script** (Fase 3) — Proxy para la API key de Claude
 - **Web Push API** (Fase 4) — Notificaciones push
 
 ## Setup local
@@ -24,7 +24,7 @@ npm install
 
 # 3. Configurar variables de entorno
 cp .env.example .env.local
-# Editar .env.local con tu GitHub token, usuario y repo
+# Editar .env.local con la URL de tu Apps Script
 
 # 4. Correr en desarrollo
 npm run dev
@@ -36,45 +36,62 @@ Ver `.env.example` para la lista completa y documentación.
 
 | Variable | Requerida | Descripción |
 |---|---|---|
-| `VITE_GITHUB_TOKEN` | ✅ Para escribir | PAT con `contents:write` |
-| `VITE_GITHUB_OWNER` | ✅ | Tu usuario de GitHub |
-| `VITE_GITHUB_REPO` | ✅ | Nombre del repositorio |
-| `VITE_GITHUB_BRANCH` | ✅ | Rama (default: `main`) |
+| `VITE_APPS_SCRIPT_URL` | ✅ | URL del Web App de Apps Script (Drive backend) |
+| `VITE_CLAUDE_PROXY_URL` | ✅ Fase 3 | URL del segundo Web App de Apps Script (proxy Claude) |
 
-> ⚠️ El token nunca debe ir al repositorio. Solo en `.env.local` (ignorado por git).
+> ⚠️ Estas URLs nunca deben ir al repositorio. Solo en `.env.local` (ignorado por git).
 
 ## Despliegue en GitHub Pages
 
 1. Crear el repositorio en GitHub.
 2. Ir a **Settings → Pages → Source: GitHub Actions**.
 3. Agregar los siguientes **Secrets** (Settings → Secrets and variables → Actions):
-   - `VITE_GITHUB_OWNER`
-   - `VITE_GITHUB_REPO`
-   - `VITE_GITHUB_BRANCH`
+   - `VITE_APPS_SCRIPT_URL`
+   - `VITE_CLAUDE_PROXY_URL` (agregar en Fase 3)
 4. El workflow `.github/workflows/deploy.yml` se dispara con cada push a `main`.
 
-> El `VITE_GITHUB_TOKEN` **no** va en los Secrets del Actions — se carga desde `.env.local` en el cliente del usuario.
+## Apps Script — Backend de persistencia (Drive)
+
+El archivo `proxy/Code.gs` no es el backend de Drive — ese vive en un proyecto separado en [script.google.com](https://script.google.com).
+
+### Setup inicial (una sola vez)
+
+1. Ir a [script.google.com](https://script.google.com) y crear un nuevo proyecto.
+2. Copiar el contenido de `apps-script/drive/Code.gs` al editor.
+3. Ejecutar `initInventory()` una vez desde el editor — esto crea el archivo `funko-inventory.json` en tu Drive.
+4. Desplegar como **Web App**:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+5. Copiar la URL del Web App a `VITE_APPS_SCRIPT_URL` en `.env.local`.
 
 ## Estructura del proyecto
 
 ```
 src/
 ├── components/
+│   ├── Camera/         CameraCapture (Fase 3)
 │   ├── Layout/         Header, BottomNav, Layout
 │   ├── Inventory/      ProductCard
-│   └── UI/             Badge, Spinner
-├── hooks/
-│   ├── useInventory.js  Estado central del inventario
-│   └── useGitHub.js     Wrapper de la GitHub API
+│   └── UI/             Badge, Spinner, Toast
+├── context/
+│   └── InventoryContext.jsx   Estado global del inventario
 ├── pages/
 │   ├── Home.jsx         Dashboard con stats
-│   ├── Catalog.jsx      Grid de productos
-│   ├── AddProduct.jsx   Agregar (Fase 3)
+│   ├── Catalog.jsx      Grid con filtros y ordenamiento
+│   ├── ProductDetail.jsx  Detalle, ajuste de stock, historial
+│   ├── ProductEdit.jsx  Formulario de edición
+│   ├── AddProduct.jsx   Agregar manual + flujo IA (Fase 3)
 │   └── Search.jsx       Búsqueda en tiempo real
 ├── services/
-│   └── github.js        readInventory, writeInventory, helpers
+│   ├── drive.js         readInventory, writeInventory, helpers CRUD
+│   └── ai.js            extractFunkoMetadata via Claude (Fase 3)
 └── utils/
+    ├── image.js         compressToThumbnail, compressForAI
+    ├── barcode.js       readBarcodeFromImage via ZXing (Fase 3)
     └── inventory.js     searchProducts, sortProducts, formatDate, etc.
+
+proxy/
+└── Code.gs              Apps Script — proxy para Claude API (Fase 3)
 ```
 
 ## Schema del inventario
@@ -106,14 +123,14 @@ src/
 
 ### Consideraciones de tamaño
 
-Con ~500 Funkos × 2 fotos thumbnail (~15KB c/u en base64) el JSON puede llegar a ~15MB.
-GitHub acepta archivos hasta 100MB en repos (recomendado < 50MB). Para esta escala es perfectamente viable.
+Con ~500 Funkos × 2 fotos thumbnail (~15KB c/u en base64) el JSON puede llegar a ~15MB.  
+Google Drive soporta archivos de texto de hasta 5GB. Para esta escala es completamente viable.
 
 ## Roadmap de fases
 
 | Fase | Estado | Descripción |
 |---|---|---|
-| 1 — Setup & estructura | ✅ Completo | React + Vite + GitHub API + layout base |
-| 2 — CRUD completo | 🔜 Siguiente | Catálogo, detalle, edición, stock |
-| 3 — Agente IA | ⏳ Planificado | Claude Vision + Cloudflare Worker proxy |
+| 1 — Setup & estructura | ✅ Completo | React + Vite + Google Drive + layout base |
+| 2 — CRUD completo | ✅ Completo | Catálogo, detalle, edición, ajuste de stock |
+| 3 — Agente IA | 🔜 Siguiente | Claude Vision + ZXing barcodes + Apps Script proxy |
 | 4 — Notificaciones | ⏳ Planificado | PWA + Web Push API |
