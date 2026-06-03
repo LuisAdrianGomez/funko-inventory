@@ -33,6 +33,7 @@ jobs:
         run: npm run build
         env:
           VITE_APPS_SCRIPT_URL: ${{ secrets.VITE_APPS_SCRIPT_URL }}
+          VITE_CLAUDE_PROXY_URL: ${{ secrets.VITE_CLAUDE_PROXY_URL }}
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
