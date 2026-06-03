@@ -82,21 +82,22 @@ export async function readBarcodeFromImage(imageSource) {
 
     for (const deg of rotations) {
       try {
+        console.log(`intentando rotación ${deg}°`)
         const rotated = deg === 0 ? dataUrl : await rotateImage(dataUrl, deg)
         const img     = await loadImage(rotated)
         const result  = await tryDecode(img)
+        console.log(`éxito en ${deg}°:`, result.getText())
         return { success: true, value: result.getText() }
       } catch (err) {
+        console.log(`fallo en ${deg}°:`, err?.name, err?.message)
         const isNotFound =
           err?.name === 'NotFoundException' ||
           err?.message?.includes('NotFoundException') ||
           err?.message?.includes('No MultiFormat Readers')
 
         if (!isNotFound) {
-          // Error inesperado — no seguir intentando
           return { success: false, error: err.message || 'Error al leer el código de barras.' }
         }
-        // NotFoundException → seguir con la siguiente rotación
       }
     }
 
