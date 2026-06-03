@@ -1,5 +1,5 @@
 // ============================================================
-// Funko Inventory — AddProduct
+// Funko Inventory — AddProduct - luigomez
 // ============================================================
 // Flujo completo de agregar un Funko por foto con IA.
 //
