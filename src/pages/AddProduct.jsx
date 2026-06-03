@@ -266,9 +266,16 @@ export default function AddProduct() {
 
   // ── Paso 1: foto frontal capturada ────────────────────────
   async function handleFrontPhoto(base64) {
+    console.log('handleFrontPhoto called')
     setFrontPhoto(base64)
-    setFrontThumb(await toThumb(base64, 200))
+    console.log('antes de toThumb')
+    const thumb = await toThumb(base64, 200)
+    console.log('despues de toThumb', !!thumb)
+    setFrontThumb(thumb)
     setStep(STEP.ANALYZING)
+    console.log('step cambiado a ANALYZING')
+    // ... resto del código
+  }
 
     try {
       const meta = await extractFunkoMetadata(base64)
