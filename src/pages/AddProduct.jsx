@@ -274,8 +274,6 @@ export default function AddProduct() {
     setFrontThumb(thumb)
     setStep(STEP.ANALYZING)
     console.log('step cambiado a ANALYZING')
-    // ... resto del código
-  }
 
     try {
       const meta = await extractFunkoMetadata(base64)
