@@ -249,9 +249,15 @@ export default function AddProduct() {
 
   async function toThumb(base64, size) {
     try {
-      const res  = await fetch(base64)
-      const blob = await res.blob()
-      const file = new File([blob], 'photo.jpg', { type: blob.type })
+      // Convertir Data URL a Blob sin usar fetch (más compatible)
+      const [header, data] = base64.split(',')
+      const mime = header.match(/:(.*?);/)[1]
+      const binary = atob(data)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      const file = new File([bytes], 'photo.jpg', { type: mime })
       return await compressToThumbnail(file, size)
     } catch {
       return base64
