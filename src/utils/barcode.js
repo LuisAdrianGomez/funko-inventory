@@ -7,15 +7,7 @@
 // Instalación: npm install @zxing/browser
 // ============================================================
 
-import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/browser'
-
-// Limitar a los formatos que aparecen en Funkos — mejora velocidad y precisión
-const HINTS = new Map([
-  [
-    DecodeHintType.POSSIBLE_FORMATS,
-    [BarcodeFormat.EAN_13, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E],
-  ],
-])
+import { BrowserMultiFormatReader } from '@zxing/browser'
 
 /**
  * Lee el código de barras desde una imagen.
@@ -31,7 +23,6 @@ export async function readBarcodeFromImage(imageSource) {
     if (imageSource instanceof File) {
       objectUrl = URL.createObjectURL(imageSource)
     } else if (typeof imageSource === 'string') {
-      // Data URL base64 — convertir a Blob para createObjectURL
       objectUrl = imageSource // ZXing acepta data URLs directamente en img.src
     } else {
       return { success: false, error: 'Tipo de imagen no soportado.' }
@@ -46,8 +37,8 @@ export async function readBarcodeFromImage(imageSource) {
       img.src = objectUrl
     })
 
-    // --- Decodificar con ZXing ---
-    const reader = new BrowserMultiFormatReader(HINTS)
+    // --- Decodificar con ZXing (sin hints — soporta todos los formatos) ---
+    const reader = new BrowserMultiFormatReader()
     const result = await reader.decodeFromImageElement(img)
 
     return { success: true, value: result.getText() }
