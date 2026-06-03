@@ -266,19 +266,13 @@ export default function AddProduct() {
 
   // ── Paso 1: foto frontal capturada - luigomez ────────────────────────
   async function handleFrontPhoto(base64) {
-    console.log('handleFrontPhoto called')
     setFrontPhoto(base64)
-    console.log('antes de toThumb')
     const thumb = await toThumb(base64, 200)
-    console.log('despues de toThumb', !!thumb)
     setFrontThumb(thumb)
     setStep(STEP.ANALYZING)
-    console.log('step cambiado a ANALYZING')
 
     try {
-      console.log('llamando a extractFunkoMetadata...')
       const meta = await extractFunkoMetadata(base64)
-      console.log('meta recibida:', meta)
       setMetadata({
         name:         meta.name         || '',
         number:       meta.number       || '',
@@ -289,7 +283,6 @@ export default function AddProduct() {
       })
       setStep(STEP.BASE_PHOTO)
     } catch (err) {
-      console.log('error en extractFunkoMetadata:', err.message)
       toast.error(err.message || 'Error al analizar la foto con IA.')
       setStep(STEP.FRONT_PHOTO)
     }
