@@ -1,5 +1,5 @@
 // ============================================================
-// Funko Inventory — AddProduct - luigomez
+// Funko Inventory — AddProduct
 // ============================================================
 // Flujo completo de agregar un Funko por foto con IA.
 //
@@ -12,9 +12,6 @@
 //   step_confirm      → formulario pre-llenado, editable
 //   step_duplicate    → el barcode ya existe, ofrecer +1 unidad
 //   step_saving       → spinner mientras se guarda en Drive
-//
-// El flujo manual (sin IA) se mantiene en <ManualForm />
-// y no cambia respecto a Fase 2.
 // ============================================================
 
 import { useState } from 'react'
@@ -29,15 +26,15 @@ import Spinner from '../components/UI/Spinner'
 
 // ── Constantes de estado ─────────────────────────────────────
 const STEP = {
-  IDLE:              'idle',
-  FRONT_PHOTO:       'step_front_photo',
-  ANALYZING:         'step_analyzing',
-  BASE_PHOTO:        'step_base_photo',
-  READING_BARCODE:   'step_reading_barcode',
-  CONFIRM:           'step_confirm',
-  DUPLICATE:         'step_duplicate',
-  SAVING:            'step_saving',
-  MANUAL:            'manual',
+  IDLE:            'idle',
+  FRONT_PHOTO:     'step_front_photo',
+  ANALYZING:       'step_analyzing',
+  BASE_PHOTO:      'step_base_photo',
+  READING_BARCODE: 'step_reading_barcode',
+  CONFIRM:         'step_confirm',
+  DUPLICATE:       'step_duplicate',
+  SAVING:          'step_saving',
+  MANUAL:          'manual',
 }
 
 // ── Formulario de confirmación / edición ────────────────────
@@ -80,11 +77,11 @@ function ConfirmForm({ metadata, frontPhoto, basePhoto, barcode, onBarcodeChange
 
       {/* Campos de metadatos */}
       {[
-        { key: 'name',    label: 'Nombre *',   placeholder: 'Ej. Spider-Man' },
-        { key: 'number',  label: 'Número',     placeholder: 'Ej. 1234' },
-        { key: 'line',    label: 'Línea',      placeholder: 'Ej. Marvel' },
-        { key: 'series',  label: 'Serie',      placeholder: 'Ej. Marvel Studios' },
-        { key: 'exclusive', label: 'Exclusiva', placeholder: 'Ej. Hot Topic (o vacío)' },
+        { key: 'name',      label: 'Nombre *',   placeholder: 'Ej. Spider-Man' },
+        { key: 'number',    label: 'Número',      placeholder: 'Ej. 1234' },
+        { key: 'line',      label: 'Línea',       placeholder: 'Ej. Marvel' },
+        { key: 'series',    label: 'Serie',       placeholder: 'Ej. Marvel Studios' },
+        { key: 'exclusive', label: 'Exclusiva',   placeholder: 'Ej. Hot Topic (o vacío)' },
       ].map(({ key, label, placeholder }) => (
         <div key={key}>
           <label className="block text-xs text-zinc-400 mb-1">{label}</label>
@@ -133,7 +130,7 @@ function ConfirmForm({ metadata, frontPhoto, basePhoto, barcode, onBarcodeChange
   )
 }
 
-// ── Formulario manual (Fase 2, sin cambios) ─────────────────
+// ── Formulario manual ────────────────────────────────────────
 function ManualForm({ onSave, onCancel }) {
   const [form, setForm] = useState({
     barcode: '', name: '', number: '', line: '',
@@ -204,7 +201,7 @@ function ManualForm({ onSave, onCancel }) {
   )
 }
 
-// ── Pantalla de spinner con mensaje ─────────────────────────
+// ── Spinner con mensaje ──────────────────────────────────────
 function LoadingScreen({ message }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 px-6 py-20">
@@ -216,19 +213,19 @@ function LoadingScreen({ message }) {
 
 // ── Componente principal ─────────────────────────────────────
 export default function AddProduct() {
-  const navigate                    = useNavigate()
+  const navigate                        = useNavigate()
   const { addNewProduct, addUnit, findByBarcode } = useInventory()
-  const { showToast }               = useToast()
+  const { toast }                       = useToast()
 
-  const [step, setStep]             = useState(STEP.IDLE)
-  const [frontPhoto, setFrontPhoto] = useState(null)   // Data URL 800px — para IA
-  const [frontThumb, setFrontThumb] = useState(null)   // Data URL 200px — para guardar
-  const [basePhoto, setBasePhoto]   = useState(null)   // Data URL 800px — para ZXing
-  const [baseThumb, setBaseThumb]   = useState(null)   // Data URL 200px — para guardar
-  const [metadata, setMetadata]     = useState({
+  const [step, setStep]                 = useState(STEP.IDLE)
+  const [frontPhoto, setFrontPhoto]     = useState(null)
+  const [frontThumb, setFrontThumb]     = useState(null)
+  const [basePhoto, setBasePhoto]       = useState(null)
+  const [baseThumb, setBaseThumb]       = useState(null)
+  const [metadata, setMetadata]         = useState({
     name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false,
   })
-  const [barcode, setBarcode]       = useState('')
+  const [barcode, setBarcode]           = useState('')
   const [barcodeError, setBarcodeError] = useState('')
   const [duplicateProduct, setDuplicateProduct] = useState(null)
 
@@ -250,22 +247,21 @@ export default function AddProduct() {
     setMetadata(prev => ({ ...prev, [key]: val }))
   }
 
+  async function toThumb(base64, size) {
+    try {
+      const res  = await fetch(base64)
+      const blob = await res.blob()
+      const file = new File([blob], 'photo.jpg', { type: blob.type })
+      return await compressToThumbnail(file, size)
+    } catch {
+      return base64
+    }
+  }
+
   // ── Paso 1: foto frontal capturada ────────────────────────
   async function handleFrontPhoto(base64) {
     setFrontPhoto(base64)
-
-    // Generar thumbnail 200px para guardar en Drive
-    try {
-      // base64 ya es Data URL — convertir a File para comprimir a 200px
-      const res   = await fetch(base64)
-      const blob  = await res.blob()
-      const file  = new File([blob], 'front.jpg', { type: blob.type })
-      const thumb = await compressToThumbnail(file, 200)
-      setFrontThumb(thumb)
-    } catch {
-      setFrontThumb(base64) // fallback: usar la misma foto
-    }
-
+    setFrontThumb(await toThumb(base64, 200))
     setStep(STEP.ANALYZING)
 
     try {
@@ -280,26 +276,15 @@ export default function AddProduct() {
       })
       setStep(STEP.BASE_PHOTO)
     } catch (err) {
-      showToast(err.message || 'Error al analizar la foto con IA.', 'error')
-      setStep(STEP.FRONT_PHOTO) // regresa para reintentar
+      toast.error(err.message || 'Error al analizar la foto con IA.')
+      setStep(STEP.FRONT_PHOTO)
     }
   }
 
   // ── Paso 2: foto de la base capturada ────────────────────
   async function handleBasePhoto(base64) {
     setBasePhoto(base64)
-
-    // Generar thumbnail 200px para guardar en Drive
-    try {
-      const res   = await fetch(base64)
-      const blob  = await res.blob()
-      const file  = new File([blob], 'base.jpg', { type: blob.type })
-      const thumb = await compressToThumbnail(file, 200)
-      setBaseThumb(thumb)
-    } catch {
-      setBaseThumb(base64)
-    }
-
+    setBaseThumb(await toThumb(base64, 200))
     setStep(STEP.READING_BARCODE)
 
     const result = await readBarcodeFromImage(base64)
@@ -308,10 +293,9 @@ export default function AddProduct() {
       setBarcode(result.value)
       setBarcodeError('')
     } else {
-      // ZXing falló — mostrar campo manual con advertencia
       setBarcode('')
       setBarcodeError('No se detectó el código automáticamente. Ingrésalo manualmente.')
-      showToast('No se pudo leer el código de barras. Puedes ingresarlo a mano.', 'info')
+      toast.info('No se pudo leer el código de barras. Puedes ingresarlo a mano.')
     }
 
     setStep(STEP.CONFIRM)
@@ -324,11 +308,10 @@ export default function AddProduct() {
       return
     }
     if (!metadata.name) {
-      showToast('El nombre del Funko es obligatorio.', 'error')
+      toast.error('El nombre del Funko es obligatorio.')
       return
     }
 
-    // Verificar duplicado justo antes de guardar
     const existing = findByBarcode(barcode)
     if (existing) {
       setDuplicateProduct(existing)
@@ -341,20 +324,20 @@ export default function AddProduct() {
     const product = {
       barcode,
       ...metadata,
-      exclusive:    metadata.is_exclusive ? (metadata.exclusive || null) : null,
-      image_front:  frontThumb || null,
-      image_base:   baseThumb  || null,
-      price:        null,
-      notes:        '',
+      exclusive:   metadata.is_exclusive ? (metadata.exclusive || null) : null,
+      image_front: frontThumb || null,
+      image_base:  baseThumb  || null,
+      price:       null,
+      notes:       '',
     }
 
     const ok = await addNewProduct(product)
 
     if (ok) {
-      showToast(`"${metadata.name}" agregado al inventario.`, 'success')
+      toast.success(`"${metadata.name}" agregado al inventario.`)
       navigate(`/product/${barcode}`)
     } else {
-      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      toast.error('Error al guardar en Drive. Intenta de nuevo.')
       setStep(STEP.CONFIRM)
     }
   }
@@ -364,10 +347,10 @@ export default function AddProduct() {
     setStep(STEP.SAVING)
     const ok = await addUnit(barcode)
     if (ok) {
-      showToast(`+1 unidad a "${duplicateProduct.name}".`, 'success')
+      toast.success(`+1 unidad a "${duplicateProduct?.name}".`)
       navigate(`/product/${barcode}`)
     } else {
-      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      toast.error('Error al guardar en Drive. Intenta de nuevo.')
       setStep(STEP.DUPLICATE)
     }
   }
@@ -376,7 +359,7 @@ export default function AddProduct() {
   async function handleManualSave(form) {
     const existing = findByBarcode(form.barcode)
     if (existing) {
-      showToast(`El código "${form.barcode}" ya existe en el inventario.`, 'error')
+      toast.error(`El código "${form.barcode}" ya existe en el inventario.`)
       return
     }
 
@@ -384,8 +367,8 @@ export default function AddProduct() {
 
     const product = {
       ...form,
-      price: form.price ? parseFloat(form.price) : null,
-      exclusive: form.is_exclusive ? (form.exclusive || null) : null,
+      price:       form.price ? parseFloat(form.price) : null,
+      exclusive:   form.is_exclusive ? (form.exclusive || null) : null,
       image_front: null,
       image_base:  null,
     }
@@ -393,27 +376,19 @@ export default function AddProduct() {
     const ok = await addNewProduct(product)
 
     if (ok) {
-      showToast(`"${form.name}" agregado al inventario.`, 'success')
+      toast.success(`"${form.name}" agregado al inventario.`)
       navigate(`/product/${form.barcode}`)
     } else {
-      showToast('Error al guardar en Drive. Intenta de nuevo.', 'error')
+      toast.error('Error al guardar en Drive. Intenta de nuevo.')
       setStep(STEP.MANUAL)
     }
   }
 
   // ── Renders por estado ────────────────────────────────────
 
-  if (step === STEP.ANALYZING) {
-    return <LoadingScreen message="Analizando la foto con IA…" />
-  }
-
-  if (step === STEP.READING_BARCODE) {
-    return <LoadingScreen message="Leyendo código de barras…" />
-  }
-
-  if (step === STEP.SAVING) {
-    return <LoadingScreen message="Guardando en tu inventario…" />
-  }
+  if (step === STEP.ANALYZING)       return <LoadingScreen message="Analizando la foto con IA…" />
+  if (step === STEP.READING_BARCODE) return <LoadingScreen message="Leyendo código de barras…" />
+  if (step === STEP.SAVING)          return <LoadingScreen message="Guardando en tu inventario…" />
 
   if (step === STEP.FRONT_PHOTO) {
     return (
