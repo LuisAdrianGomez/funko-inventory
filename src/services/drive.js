@@ -192,6 +192,34 @@ export function updateProduct(inventory, barcode, fields) {
   return { ...inventory, products, last_updated: now }
 }
 
+export function updateHistoryNote(inventory, barcode, historyIndex, note) {
+  const productIndex = inventory.products.findIndex(
+    (p) => String(p.barcode) === String(barcode)
+  )
+  if (productIndex === -1) throw new Error(`Producto con cÃ³digo ${barcode} no encontrado.`)
+
+  const product = inventory.products[productIndex]
+  const history = [...(product.history || [])]
+  if (historyIndex < 0 || historyIndex >= history.length) {
+    throw new Error('Movimiento de historial no encontrado.')
+  }
+
+  const now = new Date().toISOString()
+  history[historyIndex] = {
+    ...history[historyIndex],
+    note: String(note ?? '').trim(),
+  }
+
+  const products = [...inventory.products]
+  products[productIndex] = {
+    ...product,
+    history,
+    updated_at: now,
+  }
+
+  return { ...inventory, products, last_updated: now }
+}
+
 export function deleteProduct(inventory, barcode) {
   if (!findByBarcode(inventory, barcode)) {
     throw new Error(`Producto con código ${barcode} no encontrado.`)

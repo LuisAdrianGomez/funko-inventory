@@ -21,13 +21,23 @@ export function totalStock(inventory) {
  * @returns {Array}
  */
 export function searchProducts(inventory, query) {
-  if (!query?.trim()) return inventory?.products || []
-  const q = query.trim().toLowerCase()
-  return (inventory?.products || []).filter((p) =>
+  const products = Array.isArray(inventory) ? inventory : (inventory?.products || [])
+  if (!query?.trim()) return products
+  const q = normalizeSearchValue(query)
+  return products.filter((p) =>
     [p.name, p.line, p.series, p.number, p.barcode, p.exclusive]
       .filter(Boolean)
-      .some((field) => String(field).toLowerCase().includes(q))
+      .some((field) => normalizeSearchValue(field).includes(q))
   )
+}
+
+function normalizeSearchValue(value) {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 /**

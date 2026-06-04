@@ -11,6 +11,7 @@ import {
   setStock as setStockHelper,
   addProduct as addProductHelper,
   updateProduct as updateProductHelper,
+  updateHistoryNote as updateHistoryNoteHelper,
   deleteProduct as deleteProductHelper,
 } from '../services/drive'
 
@@ -73,6 +74,10 @@ export function InventoryProvider({ children }) {
     return persist(updateProductHelper(inventory, barcode, fields))
   }, [inventory, persist])
 
+  const editHistoryNote = useCallback(async (barcode, historyIndex, note) => {
+    return persist(updateHistoryNoteHelper(inventory, barcode, historyIndex, note))
+  }, [inventory, persist])
+
   const removeProduct = useCallback(async (barcode) => {
     return persist(deleteProductHelper(inventory, barcode))
   }, [inventory, persist])
@@ -106,7 +111,7 @@ export function InventoryProvider({ children }) {
       inventory, loading, error, stats,
       refresh, handleBarcode,
       addUnit, removeUnit, updateStock,
-      addNewProduct, editProduct, removeProduct,
+      addNewProduct, editProduct, editHistoryNote, removeProduct,
       findByBarcode: (barcode) => findByBarcodeHelper(inventory, barcode),
     }}>
       {children}

@@ -7,6 +7,7 @@ import AddProduct from './pages/AddProduct'
 import Search from './pages/Search'
 import ProductDetail from './pages/ProductDetail'
 import ProductEdit from './pages/ProductEdit'
+import ProductHistory from './pages/ProductHistory'
 import Settings from './pages/Settings'
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="settings"           element={<Settings />} />
             <Route path="product/:id"        element={<ProductDetail />} />
             <Route path="product/:id/edit"   element={<ProductEdit />} />
+            <Route path="product/:id/history" element={<ProductHistory />} />
             <Route path="*"                  element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>

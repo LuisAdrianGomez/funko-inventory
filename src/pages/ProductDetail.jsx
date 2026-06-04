@@ -301,7 +301,15 @@ export default function ProductDetail() {
         {/* History */}
         {product.history?.length > 0 && (
           <div className="card p-4">
-            <p className="text-sm font-semibold text-slate-300 mb-3">Historial</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-slate-300">Historial</p>
+              <button
+                onClick={() => navigate(`/product/${id}/history`)}
+                className="text-xs text-funko-orange hover:text-funko-orange/80 transition-colors"
+              >
+                Ver todo
+              </button>
+            </div>
             <div className="max-h-48 overflow-y-auto">
               {[...product.history].reverse().map((entry, i) => (
                 <HistoryRow key={i} entry={entry} />
