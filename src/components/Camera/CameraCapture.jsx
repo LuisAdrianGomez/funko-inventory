@@ -25,6 +25,7 @@ export default function CameraCapture({
   label = 'Toma la foto',
   hint  = '',
   maxPx = 800,
+  quality = 0.75,
 }) {
   const inputRef              = useRef(null)
   const [step, setStep]       = useState(STATE.IDLE)
@@ -38,7 +39,7 @@ export default function CameraCapture({
 
     setCompressing(true)
     try {
-      const base64 = await compressToThumbnail(file, maxPx)
+      const base64 = await compressToThumbnail(file, maxPx, quality)
       setPreview(base64)
       setStep(STATE.PREVIEW)
     } catch {

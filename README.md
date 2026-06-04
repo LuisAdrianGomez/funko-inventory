@@ -134,6 +134,17 @@ src/sw.js                Service Worker manual — cache + notificaciones push (
 {
   "version": "1.0",
   "last_updated": "ISO-8601",
+  "sold_cleanup": [{
+    "id": "barcode-ISO-8601-historyIndex-unitIndex",
+    "barcode": "012345678901",
+    "product_name": "Spider-Man",
+    "number": "03",
+    "line": "Marvel",
+    "series": "Marvel Studios",
+    "exclusive": "Hot Topic",
+    "sold_at": "ISO-8601",
+    "history_index": 3
+  }],
   "products": [{
     "id": "barcode_value",
     "barcode": "012345678901",
@@ -159,6 +170,8 @@ src/sw.js                Service Worker manual — cache + notificaciones push (
 
 Con ~500 Funkos × 2 fotos thumbnail (~15KB c/u en base64) el JSON puede llegar a ~15MB.  
 Google Drive soporta archivos de texto de hasta 5GB. Para esta escala es completamente viable.
+
+La lista `sold_cleanup` no duplica imágenes: muestra la foto frontal resolviéndola por `barcode` desde `products`.
 
 ### Consideraciones de notificaciones (Fase 4)
 

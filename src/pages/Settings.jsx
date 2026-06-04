@@ -78,7 +78,7 @@ export default function Settings() {
             {supported && permission === 'granted' && (
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p className="text-sm text-zinc-300">Recordatorios diarios</p>
+                  <p className="text-sm text-zinc-300">Recordatorios locales</p>
                   <p className="text-xs text-zinc-500 mt-0.5">10:00 AM · 3:00 PM · 8:00 PM</p>
                 </div>
                 <button
@@ -99,7 +99,7 @@ export default function Settings() {
             {supported && permission === 'default' && (
               <div className="px-4 py-3">
                 <p className="text-sm text-zinc-400 mb-3">
-                  Activa las notificaciones para recibir recordatorios de actualizar tu inventario.
+                  Activa notificaciones locales para probar avisos desde esta app.
                 </p>
                 <button
                   onClick={requestPermission}
@@ -113,7 +113,7 @@ export default function Settings() {
             {supported && permission !== 'denied' && (
               <div className="px-4 py-3">
                 <p className="text-xs text-zinc-500">
-                  En iPhone, instala la app en pantalla de inicio. Los recordatorios locales funcionan mejor mientras la PWA mantiene una sesión activa.
+                  Estos avisos son locales: dependen de que la app o PWA conserve una sesión activa. Si la cierras por completo o el sistema la suspende, no son recordatorios garantizados en segundo plano.
                 </p>
               </div>
             )}
@@ -167,6 +167,24 @@ export default function Settings() {
                 className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               >
                 Recargar inventario desde Drive
+              </button>
+            </div>
+
+            <div className="px-4 py-3">
+              <button
+                onClick={() => navigate('/reports')}
+                className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                Ver reportes
+              </button>
+            </div>
+
+            <div className="px-4 py-3">
+              <button
+                onClick={() => navigate('/sold-cleanup')}
+                className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                Depurar vendidos
               </button>
             </div>
           </div>

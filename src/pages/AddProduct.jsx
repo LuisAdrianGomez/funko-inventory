@@ -139,7 +139,12 @@ function ManualForm({ onSave, onCancel }) {
   })
 
   function set(key, val) {
-    setForm(prev => ({ ...prev, [key]: val }))
+    setForm(prev => {
+      const next = { ...prev, [key]: val }
+      if (key === 'exclusive') next.is_exclusive = Boolean(String(val || '').trim())
+      if (key === 'is_exclusive' && !val) next.exclusive = ''
+      return next
+    })
   }
 
   return (
@@ -240,7 +245,12 @@ export default function AddProduct() {
   }
 
   function setMeta(key, val) {
-    setMetadata(prev => ({ ...prev, [key]: val }))
+    setMetadata(prev => {
+      const next = { ...prev, [key]: val }
+      if (key === 'exclusive') next.is_exclusive = Boolean(String(val || '').trim())
+      if (key === 'is_exclusive' && !val) next.exclusive = ''
+      return next
+    })
   }
 
   async function toThumb(base64, size) {
@@ -268,13 +278,14 @@ export default function AddProduct() {
 
     try {
       const meta = await extractFunkoMetadata(base64)
+      const exclusive = meta.exclusive?.trim() || ''
       setMetadata({
         name:         meta.name         || '',
         number:       meta.number       || '',
         line:         meta.line         || '',
         series:       meta.series       || '',
-        exclusive:    meta.exclusive    || '',
-        is_exclusive: meta.is_exclusive === true,
+        exclusive,
+        is_exclusive: Boolean(exclusive),
       })
       setStep(STEP.BASE_PHOTO)
     } catch (err) {
@@ -322,10 +333,12 @@ export default function AddProduct() {
 
     setStep(STEP.SAVING)
 
+    const exclusive = metadata.exclusive?.trim() || ''
     const product = {
       barcode,
       ...metadata,
-      exclusive:   metadata.is_exclusive ? (metadata.exclusive || null) : null,
+      exclusive:   exclusive || null,
+      is_exclusive: Boolean(exclusive),
       image_front: frontThumb || null,
       image_base:  baseThumb  || null,
       price:       null,
@@ -366,10 +379,12 @@ export default function AddProduct() {
 
     setStep(STEP.SAVING)
 
+    const exclusive = form.exclusive?.trim() || ''
     const product = {
       ...form,
       price:       form.price ? parseFloat(form.price) : null,
-      exclusive:   form.is_exclusive ? (form.exclusive || null) : null,
+      exclusive:   exclusive || null,
+      is_exclusive: Boolean(exclusive),
       image_front: null,
       image_base:  null,
     }
@@ -395,8 +410,9 @@ export default function AddProduct() {
     return (
       <CameraCapture
         label="Foto frontal del Funko"
-        hint="Asegúrate que el nombre y número sean legibles"
-        maxPx={800}
+        hint="Centra la caja o figura completa. Procura que nombre y número se lean, con buena luz, sin reflejos y sin cortar esquinas."
+        maxPx={1200}
+        quality={0.85}
         onCapture={handleFrontPhoto}
         onCancel={resetFlow}
       />

@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useInventory } from '../hooks/useInventory'
 import { useNotifications } from '../hooks/useNotifications'
 import { scheduleReminders } from '../utils/notifications'
@@ -6,6 +7,7 @@ import NotificationBanner from '../components/UI/NotificationBanner'
 import { formatDate } from '../utils/inventory'
 
 export default function Home() {
+  const navigate = useNavigate()
   const { inventory, loading, error, stats, refresh } = useInventory()
   const { permission, dismissed, requestPermission, dismiss } = useNotifications()
 
@@ -96,6 +98,20 @@ export default function Home() {
         <p className="text-sm text-slate-400">
           Usa el botón <span className="text-funko-orange font-bold">+</span> en la barra inferior para agregar un Funko.
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/reports')}
+          className="mt-2 w-full py-2.5 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 hover:border-slate-500 hover:text-slate-100 transition-colors"
+        >
+          Ver reportes
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/sold-cleanup')}
+          className="w-full py-2.5 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 hover:border-slate-500 hover:text-slate-100 transition-colors"
+        >
+          Depurar vendidos
+        </button>
       </div>
 
     </div>

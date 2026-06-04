@@ -105,7 +105,7 @@ export default function ProductEdit() {
   const set = (key) => (value) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value }
-      if (key === 'exclusive')    next.is_exclusive = Boolean(value)
+      if (key === 'exclusive')    next.is_exclusive = Boolean(String(value || '').trim())
       if (key === 'is_exclusive' && !value) next.exclusive = ''
       return next
     })
@@ -130,13 +130,14 @@ export default function ProductEdit() {
 
   const handleSave = async () => {
     if (!form.name?.trim()) { toast.error('El nombre es requerido.'); return }
+    const exclusive = form.exclusive?.trim() || ''
     setSaving(true)
     try {
       const ok = await editProduct(product.barcode, {
         ...form,
         price:       form.price ? parseFloat(form.price) : null,
-        exclusive:   form.exclusive || null,
-        is_exclusive: Boolean(form.exclusive),
+        exclusive:   exclusive || null,
+        is_exclusive: Boolean(exclusive),
       })
       if (ok) {
         toast.success('Cambios guardados ✓')
@@ -210,14 +211,15 @@ export default function ProductEdit() {
                 {form.is_exclusive ? 'Es exclusivo' : 'No es exclusivo'}
               </span>
             </div>
-            {form.is_exclusive && (
-              <TextInput
-                value={form.exclusive}
-                onChange={set('exclusive')}
-                placeholder="Ej. Hot Topic, GameStop..."
-                disabled={saving}
-              />
-            )}
+            <TextInput
+              value={form.exclusive}
+              onChange={set('exclusive')}
+              placeholder="Ej. Hot Topic, GameStop..."
+              disabled={saving}
+            />
+            <p className="text-xs text-slate-500">
+              Si capturas una tienda o evento, se marcará como exclusivo. Si lo dejas vacío, se guarda como no exclusivo.
+            </p>
           </div>
 
           {/* Notes */}

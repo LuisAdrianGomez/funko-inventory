@@ -83,6 +83,15 @@ export function createEmptyInventory() {
     version: '1.0',
     last_updated: new Date().toISOString(),
     products: [],
+    sold_cleanup: [],
+  }
+}
+
+function withCollections(inventory) {
+  return {
+    ...inventory,
+    products: inventory?.products || [],
+    sold_cleanup: inventory?.sold_cleanup || [],
   }
 }
 
@@ -94,6 +103,7 @@ export function findByBarcode(inventory, barcode) {
 }
 
 export function addUnit(inventory, barcode) {
+  inventory = withCollections(inventory)
   const productIndex = inventory.products.findIndex(
     (p) => String(p.barcode) === String(barcode)
   )
@@ -103,7 +113,7 @@ export function addUnit(inventory, barcode) {
   const updated = { ...inventory.products[productIndex] }
   updated.stock = (updated.stock || 0) + 1
   updated.updated_at = now
-  updated.history = [...(updated.history || []), { action: 'add', units: 1, date: now, note: '' }]
+  updated.history = [...(updated.history || []), { action: 'add', units: 1, date: now, note: 'Se agrega pieza' }]
 
   const products = [...inventory.products]
   products[productIndex] = updated
@@ -111,6 +121,7 @@ export function addUnit(inventory, barcode) {
 }
 
 export function removeUnit(inventory, barcode) {
+  inventory = withCollections(inventory)
   const productIndex = inventory.products.findIndex(
     (p) => String(p.barcode) === String(barcode)
   )
@@ -121,16 +132,35 @@ export function removeUnit(inventory, barcode) {
 
   const now = new Date().toISOString()
   const updated = { ...product }
+  const historyIndex = (updated.history || []).length
   updated.stock = updated.stock - 1
   updated.updated_at = now
-  updated.history = [...(updated.history || []), { action: 'remove', units: 1, date: now, note: '' }]
+  updated.history = [...(updated.history || []), { action: 'remove', units: 1, date: now, note: 'Venta' }]
 
   const products = [...inventory.products]
   products[productIndex] = updated
-  return { ...inventory, products, last_updated: now }
+  const soldEntry = {
+    id: `${String(product.barcode)}-${now}-${historyIndex}-0`,
+    barcode: String(product.barcode),
+    product_name: product.name || 'Sin nombre',
+    number: product.number || null,
+    line: product.line || null,
+    series: product.series || null,
+    exclusive: product.exclusive || null,
+    sold_at: now,
+    history_index: historyIndex,
+  }
+
+  return {
+    ...inventory,
+    products,
+    sold_cleanup: [...inventory.sold_cleanup, soldEntry],
+    last_updated: now,
+  }
 }
 
 export function setStock(inventory, barcode, newValue) {
+  inventory = withCollections(inventory)
   const parsed = parseInt(newValue, 10)
   if (isNaN(parsed) || parsed < 0) throw new Error('El stock debe ser un número entero igual o mayor a 0.')
 
@@ -164,6 +194,7 @@ export function setStock(inventory, barcode, newValue) {
 }
 
 export function updateProduct(inventory, barcode, fields) {
+  inventory = withCollections(inventory)
   const productIndex = inventory.products.findIndex(
     (p) => String(p.barcode) === String(barcode)
   )
@@ -192,7 +223,8 @@ export function updateProduct(inventory, barcode, fields) {
   return { ...inventory, products, last_updated: now }
 }
 
-export function updateHistoryNote(inventory, barcode, historyIndex, note) {
+export function updateHistoryEntry(inventory, barcode, historyIndex, fields) {
+  inventory = withCollections(inventory)
   const productIndex = inventory.products.findIndex(
     (p) => String(p.barcode) === String(barcode)
   )
@@ -205,9 +237,19 @@ export function updateHistoryNote(inventory, barcode, historyIndex, note) {
   }
 
   const now = new Date().toISOString()
+  const safeFields = {}
+  if ('note' in fields) safeFields.note = String(fields.note ?? '').trim()
+  if ('date' in fields) {
+    const date = new Date(fields.date)
+    if (Number.isNaN(date.getTime())) {
+      throw new Error('Fecha de historial inválida.')
+    }
+    safeFields.date = date.toISOString()
+  }
+
   history[historyIndex] = {
     ...history[historyIndex],
-    note: String(note ?? '').trim(),
+    ...safeFields,
   }
 
   const products = [...inventory.products]
@@ -220,7 +262,21 @@ export function updateHistoryNote(inventory, barcode, historyIndex, note) {
   return { ...inventory, products, last_updated: now }
 }
 
+export function deleteSoldCleanupEntries(inventory, ids) {
+  inventory = withCollections(inventory)
+  const idSet = new Set((ids || []).map(String))
+  if (idSet.size === 0) return inventory
+
+  const now = new Date().toISOString()
+  return {
+    ...inventory,
+    sold_cleanup: inventory.sold_cleanup.filter((entry) => !idSet.has(String(entry.id))),
+    last_updated: now,
+  }
+}
+
 export function deleteProduct(inventory, barcode) {
+  inventory = withCollections(inventory)
   if (!findByBarcode(inventory, barcode)) {
     throw new Error(`Producto con código ${barcode} no encontrado.`)
   }
@@ -233,6 +289,7 @@ export function deleteProduct(inventory, barcode) {
 }
 
 export function addProduct(inventory, product) {
+  inventory = withCollections(inventory)
   if (!product?.barcode) throw new Error('El producto debe incluir un código de barras.')
   if (findByBarcode(inventory, product.barcode)) {
     throw new Error(`Ya existe un producto con el código ${product.barcode}.`)

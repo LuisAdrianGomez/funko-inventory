@@ -11,7 +11,8 @@ import {
   setStock as setStockHelper,
   addProduct as addProductHelper,
   updateProduct as updateProductHelper,
-  updateHistoryNote as updateHistoryNoteHelper,
+  updateHistoryEntry as updateHistoryEntryHelper,
+  deleteSoldCleanupEntries as deleteSoldCleanupEntriesHelper,
   deleteProduct as deleteProductHelper,
 } from '../services/drive'
 
@@ -30,7 +31,11 @@ export function InventoryProvider({ children }) {
     setError(null)
     try {
       const { data } = await readInventory()
-      setInventory(data)
+      setInventory({
+        ...data,
+        products: data?.products || [],
+        sold_cleanup: data?.sold_cleanup || [],
+      })
     } catch (e) {
       setError(e.message)
     } finally {
@@ -74,8 +79,12 @@ export function InventoryProvider({ children }) {
     return persist(updateProductHelper(inventory, barcode, fields))
   }, [inventory, persist])
 
-  const editHistoryNote = useCallback(async (barcode, historyIndex, note) => {
-    return persist(updateHistoryNoteHelper(inventory, barcode, historyIndex, note))
+  const editHistoryEntry = useCallback(async (barcode, historyIndex, fields) => {
+    return persist(updateHistoryEntryHelper(inventory, barcode, historyIndex, fields))
+  }, [inventory, persist])
+
+  const deleteSoldCleanupEntries = useCallback(async (ids) => {
+    return persist(deleteSoldCleanupEntriesHelper(inventory, ids))
   }, [inventory, persist])
 
   const removeProduct = useCallback(async (barcode) => {
@@ -111,7 +120,7 @@ export function InventoryProvider({ children }) {
       inventory, loading, error, stats,
       refresh, handleBarcode,
       addUnit, removeUnit, updateStock,
-      addNewProduct, editProduct, editHistoryNote, removeProduct,
+      addNewProduct, editProduct, editHistoryEntry, deleteSoldCleanupEntries, removeProduct,
       findByBarcode: (barcode) => findByBarcodeHelper(inventory, barcode),
     }}>
       {children}

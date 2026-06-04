@@ -15,36 +15,64 @@ function formatHistoryDate(date) {
   })
 }
 
+function toDateTimeLocalValue(date) {
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return ''
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
 function actionLabel(action) {
   if (action === 'add') return 'Entrada'
   if (action === 'remove') return 'Salida'
   return 'Movimiento'
 }
 
-function EditHistoryModal({ entry, initialNote, saving, onCancel, onSave }) {
+function EditHistoryModal({ entry, initialNote, initialDate, saving, onCancel, onSave }) {
   const [note, setNote] = useState(initialNote)
+  const [date, setDate] = useState(toDateTimeLocalValue(initialDate))
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="card w-full max-w-sm p-5 space-y-4">
         <div>
-          <h3 className="text-base font-semibold text-slate-100">Editar descripción</h3>
+          <h3 className="text-base font-semibold text-slate-100">Editar movimiento</h3>
           <p className="text-xs text-slate-500 mt-1">
             {actionLabel(entry.action)} · {entry.units} unidad{entry.units !== 1 ? 'es' : ''}
           </p>
         </div>
 
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={4}
-          disabled={saving}
-          placeholder="Descripción del movimiento..."
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
-                     text-sm text-slate-200 placeholder-slate-600 resize-none
-                     focus:outline-none focus:border-slate-500 disabled:opacity-40"
-          autoFocus
-        />
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Fecha y hora
+          </label>
+          <input
+            type="datetime-local"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            disabled={saving}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
+                       text-sm text-slate-200 focus:outline-none focus:border-slate-500
+                       disabled:opacity-40"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Descripción
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={4}
+            disabled={saving}
+            placeholder="Descripción del movimiento..."
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
+                       text-sm text-slate-200 placeholder-slate-600 resize-none
+                       focus:outline-none focus:border-slate-500 disabled:opacity-40"
+            autoFocus
+          />
+        </div>
 
         <div className="flex gap-3">
           <button
@@ -56,7 +84,7 @@ function EditHistoryModal({ entry, initialNote, saving, onCancel, onSave }) {
             Cancelar
           </button>
           <button
-            onClick={() => onSave(note)}
+            onClick={() => onSave({ note, date })}
             disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-funko-orange hover:bg-funko-orange/90
                        text-white text-sm font-semibold transition-colors
@@ -74,7 +102,7 @@ function EditHistoryModal({ entry, initialNote, saving, onCancel, onSave }) {
 export default function ProductHistory() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { findByBarcode, editHistoryNote, loading } = useInventory()
+  const { findByBarcode, editHistoryEntry, loading } = useInventory()
   const { toasts, toast, dismiss } = useToast()
 
   const [editing, setEditing] = useState(null)
@@ -104,13 +132,27 @@ export default function ProductHistory() {
     )
   }
 
-  const handleSave = async (note) => {
+  const handleSave = async ({ note, date }) => {
     if (!editing) return
+    if (!date) {
+      toast.error('La fecha del movimiento es requerida.')
+      return
+    }
+
+    const parsedDate = new Date(date)
+    if (Number.isNaN(parsedDate.getTime())) {
+      toast.error('La fecha del movimiento no es válida.')
+      return
+    }
+
     setSaving(true)
     try {
-      const ok = await editHistoryNote(product.barcode, editing.index, note)
+      const ok = await editHistoryEntry(product.barcode, editing.index, {
+        note,
+        date: parsedDate.toISOString(),
+      })
       if (ok) {
-        toast.success('Descripción actualizada.')
+        toast.success('Movimiento actualizado.')
         setEditing(null)
       } else {
         toast.error('No se pudo guardar. Intenta de nuevo.')
@@ -176,6 +218,7 @@ export default function ProductHistory() {
         <EditHistoryModal
           entry={editing.entry}
           initialNote={editing.entry.note || ''}
+          initialDate={editing.entry.date}
           saving={saving}
           onCancel={() => setEditing(null)}
           onSave={handleSave}
