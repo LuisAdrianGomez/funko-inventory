@@ -46,7 +46,7 @@ export async function readInventory() {
  * @param {object} inventoryData - The full inventory object
  * @returns {Promise<null>} - Returns null (no SHA needed)
  */
-export async function writeInventory(inventoryData, _sha) {
+export async function writeInventory(inventoryData) {
   if (!SCRIPT_URL) {
     throw new Error('VITE_APPS_SCRIPT_URL is not set. Add it to .env.local')
   }
@@ -170,7 +170,12 @@ export function updateProduct(inventory, barcode, fields) {
   if (productIndex === -1) throw new Error(`Producto con código ${barcode} no encontrado.`)
 
   const now = new Date().toISOString()
-  const { id, barcode: _bc, stock, history, created_at, ...safeFields } = fields
+  const safeFields = { ...fields }
+  delete safeFields.id
+  delete safeFields.barcode
+  delete safeFields.stock
+  delete safeFields.history
+  delete safeFields.created_at
 
   const updated = {
     ...inventory.products[productIndex],

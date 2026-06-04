@@ -218,9 +218,7 @@ export default function AddProduct() {
   const { toast }                       = useToast()
 
   const [step, setStep]                 = useState(STEP.IDLE)
-  const [frontPhoto, setFrontPhoto]     = useState(null)
   const [frontThumb, setFrontThumb]     = useState(null)
-  const [basePhoto, setBasePhoto]       = useState(null)
   const [baseThumb, setBaseThumb]       = useState(null)
   const [metadata, setMetadata]         = useState({
     name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false,
@@ -233,9 +231,7 @@ export default function AddProduct() {
 
   function resetFlow() {
     setStep(STEP.IDLE)
-    setFrontPhoto(null)
     setFrontThumb(null)
-    setBasePhoto(null)
     setBaseThumb(null)
     setMetadata({ name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false })
     setBarcode('')
@@ -266,19 +262,12 @@ export default function AddProduct() {
 
   // ── Paso 1: foto frontal capturada - luigomez ────────────────────────
   async function handleFrontPhoto(base64) {
-    console.log('handleFrontPhoto called')
-    setFrontPhoto(base64)
-    console.log('antes de toThumb')
     const thumb = await toThumb(base64, 200)
-    console.log('despues de toThumb', !!thumb)
     setFrontThumb(thumb)
     setStep(STEP.ANALYZING)
-    console.log('step cambiado a ANALYZING')
 
     try {
-      console.log('llamando a extractFunkoMetadata...')
       const meta = await extractFunkoMetadata(base64)
-      console.log('meta recibida:', meta)
       setMetadata({
         name:         meta.name         || '',
         number:       meta.number       || '',
@@ -289,7 +278,6 @@ export default function AddProduct() {
       })
       setStep(STEP.BASE_PHOTO)
     } catch (err) {
-      console.log('error en extractFunkoMetadata:', err.message)
       toast.error(err.message || 'Error al analizar la foto con IA.')
       setStep(STEP.FRONT_PHOTO)
     }
@@ -297,7 +285,6 @@ export default function AddProduct() {
 
   // ── Paso 2: foto de la base capturada ────────────────────
   async function handleBasePhoto(base64) {
-    setBasePhoto(base64)
     setBaseThumb(await toThumb(base64, 200))
     setStep(STEP.READING_BARCODE)
 
@@ -457,7 +444,7 @@ export default function AddProduct() {
         <div className="text-center">
           <p className="text-base font-semibold text-white">Este Funko ya está en tu inventario</p>
           <p className="mt-1 text-sm text-zinc-400">
-            "{duplicateProduct?.name}" · {duplicateProduct?.stock} unidad{duplicateProduct?.stock !== 1 ? 'es' : ''}
+            &quot;{duplicateProduct?.name}&quot; · {duplicateProduct?.stock} unidad{duplicateProduct?.stock !== 1 ? 'es' : ''}
           </p>
           <p className="mt-3 text-sm text-zinc-300">¿Agregar +1 unidad?</p>
         </div>

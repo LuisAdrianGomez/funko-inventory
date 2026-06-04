@@ -35,7 +35,7 @@ function DeleteModal({ productName, onConfirm, onCancel, loading }) {
         <h3 className="text-lg font-bold text-slate-100">¿Eliminar producto?</h3>
         <p className="text-sm text-slate-400">
           Se eliminará{' '}
-          <span className="text-slate-200 font-medium">"{productName}"</span>{' '}
+          <span className="text-slate-200 font-medium">&quot;{productName}&quot;</span>{' '}
           del inventario permanentemente. Esta acción no se puede deshacer.
         </p>
         <div className="flex gap-3 pt-1">

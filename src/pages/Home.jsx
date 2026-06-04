@@ -1,12 +1,34 @@
 import { useInventory } from '../hooks/useInventory'
+import { useNotifications } from '../hooks/useNotifications'
+import { scheduleReminders } from '../utils/notifications'
 import Spinner from '../components/UI/Spinner'
+import NotificationBanner from '../components/UI/NotificationBanner'
 import { formatDate } from '../utils/inventory'
 
 export default function Home() {
   const { inventory, loading, error, stats, refresh } = useInventory()
+  const { permission, dismissed, requestPermission, dismiss } = useNotifications()
+
+  const showBanner = permission === 'default' && !dismissed
+
+  async function handleActivate() {
+    await requestPermission()
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      scheduleReminders()
+    }
+  }
 
   return (
     <div className="max-w-md mx-auto py-4 space-y-4">
+
+      {/* Notification banner */}
+      {showBanner && (
+        <NotificationBanner
+          onActivate={handleActivate}
+          onDismiss={dismiss}
+        />
+      )}
+
       {/* Page title */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-100">Dashboard</h2>
@@ -76,15 +98,6 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Upcoming phases hint */}
-      <div className="card p-4 border-dashed border-slate-700 space-y-1">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Próximas fases</p>
-        <ul className="text-xs text-slate-500 space-y-1 mt-1">
-          <li>📋 Fase 2 — Catálogo completo + edición manual</li>
-          <li>🤖 Fase 3 — Agente IA (lectura de fotos + código de barras)</li>
-          <li>🔔 Fase 4 — Notificaciones push</li>
-        </ul>
-      </div>
     </div>
   )
 }
