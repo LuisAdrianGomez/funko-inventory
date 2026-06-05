@@ -278,6 +278,7 @@ export default function AddProduct() {
 
     try {
       const meta = await extractFunkoMetadata(base64)
+      if (meta._warning) toast.info(meta._warning)
       const exclusive = meta.exclusive?.trim() || ''
       setMetadata({
         name:         meta.name         || '',
