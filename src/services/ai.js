@@ -1,175 +1,122 @@
 // ============================================================
-// Funko Inventory — Gemini Vision Proxy
+// Funko Inventory — Servicio de IA
 // ============================================================
-// Endpoint único:
-//   POST { image_base64: string, media_type: string }
-//   → { ok: true,  metadata: { name, number, line, series, exclusive, is_exclusive } }
-//   → { ok: false, error: string }
-//
-// Setup (una sola vez):
-//   1. En el editor: Proyecto → Configuración del proyecto →
-//      Propiedades del script → Agregar propiedad:
-//        Key:   GEMINI_API_KEY
-//        Value: tu API key de aistudio.google.com
-//   2. Desplegar como Web App:
-//        Execute as: Me
-//        Who has access: Anyone
-//   3. Copiar la URL del Web App a VITE_CLAUDE_PROXY_URL en .env.local
-//
-// ⚠️  Este es un proyecto SEPARADO del backend de Drive.
+// Envía una imagen al proxy de Gemini (Apps Script) y retorna
+// los metadatos extraídos del Funko Pop.
 // ============================================================
 
-const GEMINI_MODEL   = 'gemini-2.0-flash'
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent'
+const PROXY_URL  = import.meta.env.VITE_CLAUDE_PROXY_URL
+const TIMEOUT_MS = 30_000
 
-const PROMPT = `Eres un experto en Funko Pops. Analiza la imagen y extrae los metadatos visibles.
-Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks.
+// Límite estimado del free tier de Gemini por día
+const DAILY_LIMIT   = 20
+// Avisar cuando queden este número de requests
+const WARN_AT       = 5
+const LS_COUNT_KEY  = 'gemini_daily_count'
+const LS_DATE_KEY   = 'gemini_daily_date'
 
-Formato exacto requerido:
-{
-  "name": "nombre del personaje",
-  "number": "número en la caja (solo dígitos, sin #)",
-  "line": "línea principal (ej: Marvel, DC, Disney, Star Wars)",
-  "series": "nombre de la serie o colección específica",
-  "exclusive": "nombre de la tienda exclusiva o null si no es exclusivo",
-  "is_exclusive": true o false
+// ── Contador diario ────────────────────────────────────────────────────────
+
+function getTodayStr() {
+  return new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
 }
 
-Si no puedes leer un campo con certeza, usa null para ese campo.
-Nunca inventes datos que no sean claramente visibles en la imagen.`
+function getCounter() {
+  const savedDate  = localStorage.getItem(LS_DATE_KEY)
+  const today      = getTodayStr()
 
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-function jsonResponse(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON)
-}
-
-function getApiKey() {
-  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')
-  if (!key) throw new Error('GEMINI_API_KEY no configurada en las propiedades del script.')
-  return key
-}
-
-// ------------------------------------------------------------
-// GET handler — health check
-// ------------------------------------------------------------
-
-function doGet() {
-  return jsonResponse({ ok: true, message: 'Gemini proxy activo. Modelo: ' + GEMINI_MODEL })
-}
-
-// ------------------------------------------------------------
-// POST handler — extrae metadatos de una imagen de Funko
-// ------------------------------------------------------------
-
-function doPost(e) {
-  try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return jsonResponse({ ok: false, error: 'Request body vacío.' })
-    }
-
-    const body = JSON.parse(e.postData.contents)
-
-    if (!body.image_base64) {
-      return jsonResponse({ ok: false, error: 'Campo requerido: image_base64' })
-    }
-
-    const mediaType = body.media_type || 'image/jpeg'
-    const apiKey    = getApiKey()
-
-    // --- Construir request para Gemini ---
-    const payload = {
-      contents: [
-        {
-          parts: [
-            {
-              inline_data: {
-                mime_type: mediaType,
-                data: body.image_base64,
-              },
-            },
-            {
-              text: PROMPT,
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 512,
-      },
-    }
-
-    const response = UrlFetchApp.fetch(GEMINI_API_URL + '?key=' + apiKey, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true,
-    })
-
-    const statusCode = response.getResponseCode()
-    const rawText    = response.getContentText()
-
-    // --- Manejar errores HTTP ---
-    if (statusCode !== 200) {
-      let errorMsg = 'Gemini API error ' + statusCode
-      try {
-        const errorBody = JSON.parse(rawText)
-        if (errorBody.error && errorBody.error.message) {
-          errorMsg = errorBody.error.message
-        }
-      } catch (_) {}
-      return jsonResponse({ ok: false, error: errorMsg })
-    }
-
-    // --- Extraer texto de la respuesta ---
-    const geminiResponse = JSON.parse(rawText)
-    const text = geminiResponse
-      ?.candidates?.[0]
-      ?.content
-      ?.parts?.[0]
-      ?.text
-
-    if (!text) {
-      return jsonResponse({ ok: false, error: 'Gemini no devolvió texto en la respuesta.' })
-    }
-
-    // --- Parsear JSON de metadatos (robusto ante texto extra) ---
-    let metadata
-    try {
-      const clean = text
-        .replace(/```json/gi, '')
-        .replace(/```/g, '')
-        .trim()
-
-      // Extraer el primer objeto JSON aunque Gemini agregue texto alrededor
-      const jsonMatch = clean.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('No se encontró JSON en la respuesta de Gemini.')
-      metadata = JSON.parse(jsonMatch[0])
-    } catch (_) {
-      return jsonResponse({
-        ok: false,
-        error: 'No se pudo parsear el JSON de metadatos. Respuesta: ' + text,
-      })
-    }
-
-    // --- Normalizar campos ---
-    const normalized = {
-      name:         metadata.name         || null,
-      number:       metadata.number != null ? String(metadata.number) : null,
-      line:         metadata.line         || null,
-      series:       metadata.series       || null,
-      exclusive:    metadata.exclusive    || null,
-      is_exclusive: metadata.is_exclusive === true,
-    }
-
-    return jsonResponse({ ok: true, metadata: normalized })
-
-  } catch (err) {
-    return jsonResponse({ ok: false, error: err.message })
+  // Si es un día nuevo, resetear el contador
+  if (savedDate !== today) {
+    localStorage.setItem(LS_DATE_KEY, today)
+    localStorage.setItem(LS_COUNT_KEY, '0')
+    return 0
   }
+
+  return parseInt(localStorage.getItem(LS_COUNT_KEY) || '0', 10)
+}
+
+function incrementCounter() {
+  const current = getCounter()
+  localStorage.setItem(LS_COUNT_KEY, String(current + 1))
+  return current + 1
+}
+
+/**
+ * Retorna cuántos requests de IA quedan hoy según el contador local.
+ * Útil para mostrar en UI si se desea.
+ */
+export function getRemainingRequests() {
+  return Math.max(0, DAILY_LIMIT - getCounter())
+}
+
+// ── Extracción de metadatos ────────────────────────────────────────────────
+
+/**
+ * Extrae los metadatos de un Funko Pop a partir de una foto frontal.
+ *
+ * @param {string} imageBase64 - Data URL completa (data:image/jpeg;base64,...)
+ * @returns {Promise<{ name, number, line, series, exclusive, is_exclusive }>}
+ * @throws {Error} con mensaje descriptivo para mostrar en toast
+ */
+export async function extractFunkoMetadata(imageBase64) {
+  if (!PROXY_URL) {
+    throw new Error('VITE_CLAUDE_PROXY_URL no está configurada.')
+  }
+
+  // --- Separar prefijo del base64 puro ---
+  const match = imageBase64.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) {
+    throw new Error('Formato de imagen inválido. Se esperaba un Data URL en base64.')
+  }
+  const mediaType   = match[1]
+  const base64Clean = match[2]
+
+  // --- Llamar al proxy con timeout ---
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+  let response
+  try {
+    response = await fetch(PROXY_URL, {
+      method: 'POST',
+      // text/plain evita el preflight CORS que Apps Script no maneja
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ image_base64: base64Clean, media_type: mediaType }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('La IA tardó demasiado. Intenta de nuevo.')
+    }
+    throw new Error('No se pudo conectar al proxy de Gemini. Verifica tu conexión.')
+  } finally {
+    clearTimeout(timer)
+  }
+
+  // --- Parsear respuesta ---
+  let data
+  try {
+    data = await response.json()
+  } catch {
+    throw new Error(`Error inesperado del proxy (HTTP ${response.status}).`)
+  }
+
+  if (!data.ok) {
+    throw new Error(data.error || 'Error desconocido al extraer metadatos.')
+  }
+
+  // --- Actualizar contador y calcular restantes ---
+  const usedToday  = incrementCounter()
+  const remaining  = DAILY_LIMIT - usedToday
+  
+  // Lanzar advertencia como propiedad adjunta al resultado
+  // AddProduct.jsx la leerá para mostrar el toast
+  const result = { ...data.metadata }
+  if (remaining <= WARN_AT && remaining > 0) {
+    result._warning = `Te quedan ${remaining} foto${remaining !== 1 ? 's' : ''} disponible${remaining !== 1 ? 's' : ''} con IA para hoy.`
+  } else if (remaining === 0) {
+    result._warning = 'Usaste todas las fotos con IA de hoy. Se renueva mañana.'
+  }
+
+  return result
 }
