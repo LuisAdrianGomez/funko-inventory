@@ -13,16 +13,34 @@ function HistoryRow({ entry }) {
   })
   const isAdd = entry.action === 'add'
   return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0">
-      <div>
-        <span className={`text-xs font-semibold ${isAdd ? 'text-emerald-400' : 'text-red-400'}`}>
-          {isAdd ? `+${entry.units}` : `-${entry.units}`}
-        </span>
-        {entry.note && (
-          <span className="text-xs text-slate-500 ml-2">{entry.note}</span>
-        )}
+    <div className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/55 px-3 py-3 transition-colors hover:border-slate-700 hover:bg-slate-900/80">
+      <div className={`absolute left-0 top-0 h-full w-1 ${isAdd ? 'bg-emerald-500/70' : 'bg-red-500/70'}`} />
+
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${
+          isAdd
+            ? 'border-emerald-700/70 bg-emerald-950/70 text-emerald-300'
+            : 'border-red-800/70 bg-red-950/70 text-red-300'
+        }`}>
+          {isAdd ? '+' : '-'}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className={`text-sm font-semibold ${isAdd ? 'text-emerald-300' : 'text-red-300'}`}>
+                {isAdd ? 'Entrada' : 'Salida'} · {entry.units} unidad{entry.units !== 1 ? 'es' : ''}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
+                {entry.note || 'Sin descripción'}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-500">
+              {formatted}
+            </span>
+          </div>
+        </div>
       </div>
-      <span className="text-xs text-slate-600">{formatted}</span>
     </div>
   )
 }
@@ -300,20 +318,29 @@ export default function ProductDetail() {
 
         {/* History */}
         {product.history?.length > 0 && (
-          <div className="card p-4">
+          <div className="card overflow-hidden">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-slate-300">Historial</p>
+              <div className="px-4 pt-4">
+                <p className="text-sm font-semibold text-slate-200">Historial</p>
+                <p className="text-xs text-slate-500">
+                  {product.history.length} movimiento{product.history.length !== 1 ? 's' : ''}
+                </p>
+              </div>
               <button
                 onClick={() => navigate(`/product/${id}/history`)}
-                className="text-xs text-funko-orange hover:text-funko-orange/80 transition-colors"
+                className="mr-4 mt-4 rounded-full border border-funko-orange/30 bg-funko-orange/10 px-3 py-1.5 text-xs font-semibold text-funko-orange hover:bg-funko-orange/15 transition-colors"
               >
                 Ver todo
               </button>
             </div>
-            <div className="max-h-48 overflow-y-auto">
-              {[...product.history].reverse().map((entry, i) => (
-                <HistoryRow key={i} entry={entry} />
-              ))}
+            <div className="relative px-4 pb-4">
+              <div className="pointer-events-none absolute inset-x-4 top-0 z-10 h-4 bg-gradient-to-b from-slate-900 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 h-6 bg-gradient-to-t from-slate-900 to-transparent" />
+              <div className="history-scrollbar max-h-56 space-y-2 overflow-y-auto pr-2 pt-2">
+                {[...product.history].reverse().map((entry, i) => (
+                  <HistoryRow key={i} entry={entry} />
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInventory } from '../hooks/useInventory'
 import Spinner from '../components/UI/Spinner'
@@ -7,6 +7,13 @@ const currency = new Intl.NumberFormat('es-MX', {
   style: 'currency',
   currency: 'MXN',
 })
+
+const SALES_FILTERS = [
+  { key: 'current_month', label: 'Mes actual' },
+  { key: 'current_week', label: 'Semana actual' },
+  { key: 'last_30_days', label: 'Últimos 30 días' },
+  { key: 'last_two_months', label: 'Últimos dos meses' },
+]
 
 function numberValue(value) {
   const n = Number(value)
@@ -19,6 +26,37 @@ function csvCell(value) {
     return `"${text.replace(/"/g, '""')}"`
   }
   return text
+}
+
+function formatDateTime(date) {
+  return new Date(date).toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function getSalesRange(filterKey) {
+  const now = new Date()
+  const start = new Date(now)
+
+  if (filterKey === 'current_month') {
+    start.setDate(1)
+    start.setHours(0, 0, 0, 0)
+  } else if (filterKey === 'current_week') {
+    const day = start.getDay()
+    const daysSinceMonday = day === 0 ? 6 : day - 1
+    start.setDate(start.getDate() - daysSinceMonday)
+    start.setHours(0, 0, 0, 0)
+  } else if (filterKey === 'last_30_days') {
+    start.setDate(start.getDate() - 30)
+  } else if (filterKey === 'last_two_months') {
+    start.setMonth(start.getMonth() - 2)
+  }
+
+  return { start, end: now }
 }
 
 function downloadCsv(products) {
@@ -54,6 +92,7 @@ function downloadCsv(products) {
 export default function Reports() {
   const navigate = useNavigate()
   const { inventory, loading } = useInventory()
+  const [salesFilter, setSalesFilter] = useState('current_month')
 
   const products = useMemo(() => inventory?.products || [], [inventory?.products])
 
@@ -109,6 +148,70 @@ export default function Reports() {
     }
   }, [products])
 
+  const salesReport = useMemo(() => {
+    const { start, end } = getSalesRange(salesFilter)
+    const byLineMap = new Map()
+    let totalUnits = 0
+    let totalValue = 0
+
+    const rows = products.flatMap((product) => {
+      const price = numberValue(product.price)
+      const line = product.line?.trim() || 'Sin línea'
+
+      return (product.history || [])
+        .filter((entry) => entry.action === 'remove')
+        .map((entry, index) => {
+          const date = new Date(entry.date)
+          const units = numberValue(entry.units)
+          const value = price * units
+
+          return {
+            id: `${product.barcode}-${entry.date}-${index}`,
+            barcode: product.barcode,
+            name: product.name || 'Sin nombre',
+            number: product.number,
+            line,
+            series: product.series,
+            units,
+            price,
+            value,
+            date,
+            note: entry.note || '',
+          }
+        })
+        .filter((sale) => {
+          if (Number.isNaN(sale.date.getTime())) return false
+          return sale.date >= start && sale.date <= end
+        })
+    })
+
+    rows.forEach((sale) => {
+      totalUnits += sale.units
+      totalValue += sale.value
+
+      const group = byLineMap.get(sale.line) || {
+        line: sale.line,
+        movements: 0,
+        units: 0,
+        value: 0,
+      }
+      group.movements += 1
+      group.units += sale.units
+      group.value += sale.value
+      byLineMap.set(sale.line, group)
+    })
+
+    return {
+      start,
+      end,
+      movements: rows.length,
+      totalUnits,
+      totalValue,
+      byLine: [...byLineMap.values()].sort((a, b) => b.value - a.value || a.line.localeCompare(b.line)),
+      rows: rows.sort((a, b) => b.date.getTime() - a.date.getTime()),
+    }
+  }, [products, salesFilter])
+
   if (loading) {
     return <div className="flex justify-center py-16"><Spinner size="lg" /></div>
   }
@@ -129,7 +232,7 @@ export default function Reports() {
           </button>
           <div>
             <h2 className="text-xl font-bold text-slate-100">Reportes</h2>
-            <p className="text-xs text-slate-500">Inventario, valor estimado y desglose por línea.</p>
+            <p className="text-xs text-slate-500">Inventario, ventas y valor estimado.</p>
           </div>
         </div>
 
@@ -150,6 +253,88 @@ export default function Reports() {
         <Metric label="Sin stock" value={report.outOfStock} />
         <Metric label="Valor estimado" value={currency.format(report.totalValue)} wide />
       </div>
+
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300">Ventas</h3>
+            <p className="text-xs text-slate-500">
+              {formatDateTime(salesReport.start)} - {formatDateTime(salesReport.end)}
+            </p>
+          </div>
+
+          <select
+            value={salesFilter}
+            onChange={(e) => setSalesFilter(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-slate-600"
+          >
+            {SALES_FILTERS.map((filter) => (
+              <option key={filter.key} value={filter.key}>{filter.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <Metric label="Movimientos" value={salesReport.movements} />
+          <Metric label="Unidades vendidas" value={salesReport.totalUnits} />
+          <Metric label="Valor vendido" value={currency.format(salesReport.totalValue)} />
+        </div>
+
+        {salesReport.byLine.length > 0 && (
+          <div className="grid md:grid-cols-2 gap-3">
+            {salesReport.byLine.map((line) => (
+              <div key={line.line} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{line.line}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {line.movements} movimiento{line.movements !== 1 ? 's' : ''} · {line.units} unidad{line.units !== 1 ? 'es' : ''}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-300">{currency.format(line.value)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {salesReport.rows.length === 0 ? (
+          <EmptyState text="No hay ventas registradas en este periodo." />
+        ) : (
+          <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+            <div className="hidden md:grid grid-cols-[1.3fr_0.9fr_0.7fr_0.8fr_0.9fr] gap-3 px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-800">
+              <span>Producto</span>
+              <span>Línea / serie</span>
+              <span>Unidades</span>
+              <span>Fecha</span>
+              <span className="text-right">Valor</span>
+            </div>
+
+            <div className="divide-y divide-slate-800">
+              {salesReport.rows.map((sale) => (
+                <button
+                  type="button"
+                  key={sale.id}
+                  onClick={() => navigate(`/product/${sale.barcode}`)}
+                  className="w-full text-left grid md:grid-cols-[1.3fr_0.9fr_0.7fr_0.8fr_0.9fr] gap-2 md:gap-3 px-4 py-3 hover:bg-slate-800/60 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-100">{sale.name}</p>
+                    <p className="text-xs text-slate-500">{sale.number ? `#${sale.number}` : 'Sin número'}</p>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    <p>{sale.line}</p>
+                    <p className="text-slate-500">{sale.series || 'Sin serie'}</p>
+                  </div>
+                  <p className="text-sm text-slate-300">{sale.units}</p>
+                  <p className="text-xs text-slate-400">{formatDateTime(sale.date)}</p>
+                  <p className="text-sm font-semibold text-emerald-300 md:text-right">{currency.format(sale.value)}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-slate-300">Desglose por línea</h3>

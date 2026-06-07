@@ -40,4 +40,23 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .history-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(249, 115, 22, 0.65) rgba(15, 23, 42, 0.65);
+  }
+  .history-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .history-scrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.65);
+    border-radius: 999px;
+  }
+  .history-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(251, 146, 60, 0.9), rgba(234, 88, 12, 0.75));
+    border-radius: 999px;
+  }
+  .history-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(251, 146, 60, 1), rgba(234, 88, 12, 0.95));
+  }
 }

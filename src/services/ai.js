@@ -97,6 +97,7 @@ export async function extractFunkoMetadata(imageBase64) {
   let data
   try {
     data = await response.json()
+    console.log('[AI] Respuesta completa:', JSON.stringify(data)) // ← agregar
   } catch {
     throw new Error(`Error inesperado del proxy (HTTP ${response.status}).`)
   }

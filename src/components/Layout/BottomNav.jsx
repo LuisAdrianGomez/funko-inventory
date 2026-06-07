@@ -23,8 +23,16 @@ const tabs = [
       </svg>
     ),
   },
-  // Center "Add" button — rendered separately
-  null,
+  {
+    to: '/reports',
+    label: 'Reportes',
+    icon: () => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18" />
+        <path d="M7 15l4-4 3 3 5-6" />
+      </svg>
+    ),
+  },
   {
     to: '/search',
     label: 'Buscar',
@@ -42,21 +50,19 @@ export default function BottomNav() {
   const isActive = (path) => location.pathname === path
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-slate-950/95 backdrop-blur border-t border-slate-800"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex items-center justify-around h-full max-w-md mx-auto px-2">
-
-        {/* Tab: Inicio */}
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-slate-950/95 backdrop-blur border-t border-slate-800"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex items-center justify-around h-full max-w-md mx-auto px-1">
         <NavTabButton to="/home" label="Inicio" active={isActive('/home')}>
           {tabs[0].icon(isActive('/home'))}
         </NavTabButton>
 
-        {/* Tab: Catálogo */}
         <NavTabButton to="/catalog" label="Catálogo" active={isActive('/catalog')}>
           {tabs[1].icon(isActive('/catalog'))}
         </NavTabButton>
 
-        {/* CENTER: Add button */}
         <NavLink
           to="/add"
           aria-label="Agregar producto"
@@ -74,14 +80,13 @@ export default function BottomNav() {
           </svg>
         </NavLink>
 
-        {/* Spacer for the middle slot (visual balance) */}
-        <div className="w-10" aria-hidden="true" />
+        <NavTabButton to="/reports" label="Reportes" active={isActive('/reports')}>
+          {tabs[2].icon(isActive('/reports'))}
+        </NavTabButton>
 
-        {/* Tab: Buscar */}
         <NavTabButton to="/search" label="Buscar" active={isActive('/search')}>
           {tabs[3].icon(isActive('/search'))}
         </NavTabButton>
-
       </div>
     </nav>
   )
@@ -91,7 +96,7 @@ function NavTabButton({ to, label, active, children }) {
   return (
     <NavLink
       to={to}
-      className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors tap-highlight ${
+      className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors tap-highlight ${
         active ? 'text-funko-orange' : 'text-slate-500 hover:text-slate-300'
       }`}
     >
