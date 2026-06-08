@@ -81,12 +81,13 @@ function ConfirmForm({ metadata, frontPhoto, basePhoto, barcode, onBarcodeChange
         { key: 'number',    label: 'Número',      placeholder: 'Ej. 1234' },
         { key: 'line',      label: 'Línea',       placeholder: 'Ej. Marvel' },
         { key: 'series',    label: 'Serie',       placeholder: 'Ej. Marvel Studios' },
+        { key: 'price',     label: 'Precio',      placeholder: '500' },
         { key: 'exclusive', label: 'Exclusiva',   placeholder: 'Ej. Hot Topic (o vacío)' },
       ].map(({ key, label, placeholder }) => (
         <div key={key}>
           <label className="block text-xs text-zinc-400 mb-1">{label}</label>
           <input
-            type="text"
+            type={key === 'price' ? 'number' : 'text'}
             value={metadata[key] || ''}
             onChange={e => onMetaChange(key, e.target.value)}
             placeholder={placeholder}
@@ -226,7 +227,7 @@ export default function AddProduct() {
   const [frontThumb, setFrontThumb]     = useState(null)
   const [baseThumb, setBaseThumb]       = useState(null)
   const [metadata, setMetadata]         = useState({
-    name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false,
+    name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false, price: '500',
   })
   const [barcode, setBarcode]           = useState('')
   const [barcodeError, setBarcodeError] = useState('')
@@ -238,7 +239,7 @@ export default function AddProduct() {
     setStep(STEP.IDLE)
     setFrontThumb(null)
     setBaseThumb(null)
-    setMetadata({ name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false })
+    setMetadata({ name: '', number: '', line: '', series: '', exclusive: '', is_exclusive: false, price: '500' })
     setBarcode('')
     setBarcodeError('')
     setDuplicateProduct(null)
@@ -287,6 +288,7 @@ export default function AddProduct() {
         series:       meta.series       || '',
         exclusive,
         is_exclusive: Boolean(exclusive),
+        price:        '500',
       })
       setStep(STEP.BASE_PHOTO)
     } catch (err) {
@@ -342,7 +344,7 @@ export default function AddProduct() {
       is_exclusive: Boolean(exclusive),
       image_front: frontThumb || null,
       image_base:  baseThumb  || null,
-      price:       null,
+      price:       metadata.price ? parseFloat(metadata.price) : null,
       notes:       '',
     }
 
